@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "301397424959",
+    "firebase_url": "https://gamers-arena-4ba5e-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "gamers-arena-4ba5e",
+    "storage_bucket": "gamers-arena-4ba5e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:301397424959:android:19cd8c170ebe219576318a",
+        "android_client_info": {
+          "package_name": "com.example.gamers_gram"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBCXo2Gy_eGdUc1aohVkkKEphtDz5FNsiI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
