@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gamers_gram/data/models/tournament_models.dart';
 import 'package:gamers_gram/data/services/tournaments_service.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
