@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:appwrite/appwrite.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -25,12 +25,19 @@ class ChallengeChatController extends GetxController {
   })  : _client = client,
         _storage = storage;
 
-  final RxBool hasSelectedOutcome = false.obs;
-  final Rx<DateTime?> outcomeSelectionTime = Rx<DateTime?>(null);
-  final RxBool isTimerRunning = false.obs;
-
   final RxList<dynamic> messages = <dynamic>[].obs;
   final TextEditingController messageController = TextEditingController();
+
+  // Outcome and timer-related observables
+  Rx<DateTime?> outcomeSelectionTime = Rx<DateTime?>(null);
+  RxBool isTimerRunning = RxBool(false);
+  RxBool hasSelectedOutcome = RxBool(false);
+
+  // Timer for periodic updates
+  Timer? _progressTimer;
+
+  // Total time for outcome selection
+  final Duration totalTime = const Duration(minutes: 5);
 
   @override
   void onInit() {
@@ -78,9 +85,73 @@ class ChallengeChatController extends GetxController {
   }
 
   void _startTimer() {
+    // Cancel any existing timer
+    _progressTimer?.cancel();
+
     if (outcomeSelectionTime.value != null) {
       isTimerRunning.value = true;
+
+      _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        // Check if 5 minutes have passed
+        if (DateTime.now().difference(outcomeSelectionTime.value!) >=
+            totalTime) {
+          timer.cancel();
+          isTimerRunning.value = false;
+          update(); // Update UI
+        }
+
+        // Trigger UI update
+        update();
+      });
     }
+  }
+
+  void selectOutcome(BuildContext context, bool isWin) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Outcome'),
+        content: Text(
+          'Are you sure you want to declare this as a ${isWin ? 'Win' : 'Loss'}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Update Firebase database
+              _database.child('challenges/$challengeId').update({
+                'outcome': isWin ? 'win' : 'loss',
+                'outcomeSenderId': _currentUser.value?.uid,
+                'outcomeTimestamp': ServerValue.timestamp
+              });
+
+              // Set the outcome selection time
+              outcomeSelectionTime.value = DateTime.now();
+              hasSelectedOutcome.value = true;
+
+              // Start the timer
+              _startTimer();
+
+              Navigator.pop(context);
+            },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double calculateRemainingTime() {
+    if (outcomeSelectionTime.value == null) return 0.0;
+
+    final elapsedTime = DateTime.now().difference(outcomeSelectionTime.value!);
+
+    // Ensure the value doesn't exceed 1.0
+    double progress = elapsedTime.inMilliseconds / totalTime.inMilliseconds;
+    return progress.clamp(0.0, 1.0);
   }
 
   Future<void> sendMessage({String? message, String? imageUrl}) async {
@@ -145,46 +216,10 @@ class ChallengeChatController extends GetxController {
     }
   }
 
-  void selectOutcome(BuildContext context, bool isWin) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Outcome'),
-        content: Text(
-          'Are you sure you want to declare this as a ${isWin ? 'Win' : 'Loss'}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              _database.child('challenges/$challengeId').update({
-                'outcome': isWin ? 'win' : 'loss',
-                'outcomeSenderId': _currentUser.value?.uid,
-                'outcomeTimestamp': ServerValue.timestamp
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  double calculateRemainingTime() {
-    if (outcomeSelectionTime.value == null) return 0.0;
-
-    final elapsedTime = DateTime.now().difference(outcomeSelectionTime.value!);
-    const totalTime = Duration(minutes: 5);
-
-    return elapsedTime.inMilliseconds / totalTime.inMilliseconds;
-  }
-
   @override
   void onClose() {
+    // Cancel the timer if it's running
+    _progressTimer?.cancel();
     messageController.dispose();
     super.onClose();
   }

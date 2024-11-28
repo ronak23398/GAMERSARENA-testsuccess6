@@ -31,11 +31,28 @@ class ChallengeChatPage extends StatelessWidget {
         children: [
           Obx(() {
             if (controller.hasSelectedOutcome.value) {
-              return LinearProgressIndicator(
-                value: controller.calculateRemainingTime(),
-                backgroundColor: Colors.grey[300],
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  controller.isTimerRunning.value ? Colors.green : Colors.red,
+              return Container(
+                decoration: BoxDecoration(
+                    color: const Color.fromARGB(255, 135, 46, 250)),
+                child: Column(
+                  children: [
+                    Text(
+                      "Time left for opponent to declare result",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child: LinearProgressIndicator(
+                        value: controller.calculateRemainingTime(),
+                        backgroundColor: Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          controller.isTimerRunning.value
+                              ? Colors.green
+                              : Colors.red,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               );
             }
@@ -47,8 +64,7 @@ class ChallengeChatPage extends StatelessWidget {
                 itemCount: controller.messages.length,
                 itemBuilder: (context, index) {
                   final message = controller.messages[index];
-                  final isCurrentUser =
-                      message['senderId'] == auth.currentUser;
+                  final isCurrentUser = message['senderId'] == auth.currentUser;
 
                   return Align(
                     alignment: isCurrentUser

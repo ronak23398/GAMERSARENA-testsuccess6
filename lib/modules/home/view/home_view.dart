@@ -97,10 +97,21 @@ class _HomePageState extends State<HomePage>
       appBar: AppBar(
         title: const Text('Gaming Challenges'),
         bottom: TabBar(
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicatorColor: Colors.black,
+          indicatorWeight: 5,
           controller: _tabController,
           tabs: const [
-            Tab(text: '1v1'),
-            Tab(text: 'Scrims'),
+            Tab(
+                child: Text(
+              "1v1",
+              style: TextStyle(color: Colors.white),
+            )),
+            Tab(
+                child: Text(
+              "Scrims",
+              style: TextStyle(color: Colors.white),
+            )),
           ],
         ),
         actions: [
@@ -147,22 +158,27 @@ class _HomePageState extends State<HomePage>
                             ],
                           ),
                           const SizedBox(width: 8),
-                          if (currentUser?.uid != challenge.creatorId)
-                            challenge.status == 'accepted' &&
-                                    challenge.acceptorId == currentUser?.uid
-                                ? ElevatedButton(
-                                    onPressed: () => Get.to(
-                                      () => ChallengeChatPage(
-                                          challengeId: challenge.id,
-                                          opponentId: challenge.creatorId),
-                                    ),
-                                    child: const Text('Enter Challenge'),
-                                  )
-                                : ElevatedButton(
-                                    onPressed: () => challengeController
-                                        .acceptChallenge(challenge.id),
-                                    child: const Text('Accept'),
-                                  )
+                          if (challenge.status == 'accepted' &&
+                              (currentUser?.uid == challenge.creatorId ||
+                                  currentUser?.uid == challenge.acceptorId))
+                            ElevatedButton(
+                              onPressed: () => Get.to(
+                                () => ChallengeChatPage(
+                                    challengeId: challenge.id,
+                                    opponentId:
+                                        currentUser?.uid == challenge.creatorId
+                                            ? challenge.acceptorId ??
+                                                challenge.creatorId
+                                            : challenge.creatorId),
+                              ),
+                              child: const Text('Enter Challenge'),
+                            )
+                          else if (currentUser?.uid != challenge.creatorId)
+                            ElevatedButton(
+                              onPressed: () => challengeController
+                                  .acceptChallenge(challenge.id),
+                              child: const Text('Accept'),
+                            )
                           else
                             ElevatedButton(
                               onPressed: () => challengeController
@@ -214,22 +230,25 @@ class _HomePageState extends State<HomePage>
                           ],
                         ),
                         const SizedBox(width: 8),
-                        if (currentUser?.uid != scrim.creatorId)
-                          scrim.status == 'accepted' &&
-                                  scrim.acceptorId == currentUser?.uid
-                              ? ElevatedButton(
-                                  onPressed: () => Get.to(
-                                    () => ChallengeChatPage(
-                                        challengeId: scrim.id,
-                                        opponentId: scrim.creatorId),
-                                  ),
-                                  child: const Text('Enter Challenge'),
-                                )
-                              : ElevatedButton(
-                                  onPressed: () =>
-                                      _showAcceptScrimDialog(scrim),
-                                  child: const Text('Accept'),
-                                )
+                        if (scrim.status == 'accepted' &&
+                            (currentUser?.uid == scrim.creatorId ||
+                                currentUser?.uid == scrim.acceptorId))
+                          ElevatedButton(
+                            onPressed: () => Get.to(
+                              () => ChallengeChatPage(
+                                  challengeId: scrim.id,
+                                  opponentId:
+                                      currentUser?.uid == scrim.creatorId
+                                          ? scrim.acceptorId ?? scrim.creatorId
+                                          : scrim.creatorId),
+                            ),
+                            child: const Text('Enter Challenge'),
+                          )
+                        else if (currentUser?.uid != scrim.creatorId)
+                          ElevatedButton(
+                            onPressed: () => _showAcceptScrimDialog(scrim),
+                            child: const Text('Accept'),
+                          )
                         else
                           ElevatedButton(
                             onPressed: () =>
@@ -252,3 +271,4 @@ class _HomePageState extends State<HomePage>
     );
   }
 }
+

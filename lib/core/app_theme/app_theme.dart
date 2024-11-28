@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   static ThemeData lightTheme = ThemeData(
-    primaryColor: const Color.fromARGB(255, 37, 245, 183),
+    primaryColor: const Color.fromARGB(255, 26, 86, 252),
     scaffoldBackgroundColor: Colors.white,
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color.fromARGB(255, 49, 250, 250),
+      backgroundColor: Color.fromARGB(255, 55, 106, 247),
       foregroundColor: Colors.white,
     ),
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color.fromARGB(255, 118, 247, 204),
+      seedColor: const Color.fromARGB(255, 113, 116, 255),
       secondary: Colors.black,
     ),
   );
