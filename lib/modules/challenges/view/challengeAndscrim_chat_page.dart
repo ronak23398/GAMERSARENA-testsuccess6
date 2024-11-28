@@ -14,7 +14,6 @@ class ChallengeChatPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Initialize the controller with Appwrite dependencies
     final controller = Get.put(ChallengeChatController(
       challengeId: challengeId,
       opponentId: opponentId,
@@ -29,6 +28,7 @@ class ChallengeChatPage extends StatelessWidget {
       ),
       body: Column(
         children: [
+          // Existing outcome selection indicator
           Obx(() {
             if (controller.hasSelectedOutcome.value) {
               return Container(
@@ -58,13 +58,19 @@ class ChallengeChatPage extends StatelessWidget {
             }
             return const SizedBox.shrink();
           }),
+
+          // Messages ListView
           Expanded(
             child: Obx(() {
               return ListView.builder(
+                reverse: true, // Newest messages at the bottom
                 itemCount: controller.messages.length,
                 itemBuilder: (context, index) {
-                  final message = controller.messages[index];
-                  final isCurrentUser = message['senderId'] == auth.currentUser;
+                  // Reverse index to show newest messages at the bottom
+                  final message = controller
+                      .messages[controller.messages.length - 1 - index];
+                  final isCurrentUser =
+                      message['senderId'] == auth.currentUser?.uid;
 
                   return Align(
                     alignment: isCurrentUser
@@ -79,15 +85,64 @@ class ChallengeChatPage extends StatelessWidget {
                             isCurrentUser ? Colors.blue[100] : Colors.grey[200],
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: message['imageUrl'] != null
-                          ? Image.network(message['imageUrl'], width: 200)
-                          : Text(message['message'] ?? ''),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Display image if exists
+                          if (message['imageUrl'] != null)
+                            GestureDetector(
+                              onTap: () {
+                                // Optional: Implement full screen image view
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => Dialog(
+                                    child: Image.network(
+                                      message['imageUrl'],
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Image.network(
+                                message['imageUrl'],
+                                width: 200,
+                                height: 200,
+                                fit: BoxFit.cover,
+                                loadingBuilder:
+                                    (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return CircularProgressIndicator();
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(
+                                    Icons.error,
+                                    color: Colors.red,
+                                    size: 50,
+                                  );
+                                },
+                              ),
+                            ),
+
+                          // Display text message if exists
+                          if (message['message'] != null &&
+                              message['message'].isNotEmpty)
+                            Text(
+                              message['message'],
+                              style: TextStyle(
+                                  color: isCurrentUser
+                                      ? Colors.black87
+                                      : Colors.black87),
+                            ),
+                        ],
+                      ),
                     ),
                   );
                 },
               );
             }),
           ),
+
+          // Outcome selection buttons (if not selected)
           Obx(() {
             if (!controller.hasSelectedOutcome.value) {
               return Row(
@@ -110,6 +165,8 @@ class ChallengeChatPage extends StatelessWidget {
             }
             return const SizedBox.shrink();
           }),
+
+          // Message input and image pick section
           Row(
             children: [
               IconButton(

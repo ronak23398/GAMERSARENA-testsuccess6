@@ -155,10 +155,14 @@ class ChallengeChatController extends GetxController {
   }
 
   Future<void> sendMessage({String? message, String? imageUrl}) async {
+    if ((message == null || message.trim().isEmpty) && imageUrl == null) {
+      return;
+    }
+
     await _database.child('challenge_chats/$challengeId/messages').push().set({
       'senderId': _currentUser.value?.uid,
       'senderName': _currentUser.value?.displayName ?? 'User',
-      'message': message,
+      'message': message?.trim(),
       'imageUrl': imageUrl,
       'timestamp': ServerValue.timestamp
     });
@@ -167,11 +171,12 @@ class ChallengeChatController extends GetxController {
   Future<String?> _uploadImage(XFile imageFile) async {
     try {
       final bytes = await imageFile.readAsBytes();
-      final fileExt = imageFile.path.split('.').last;
-      final fileName = '${DateTime.now().toIso8601String()}.$fileExt';
+      final fileExt = imageFile.path.split('.').last.toLowerCase();
+      final fileName =
+          '${_currentUser.value?.uid}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
 
       final file = await _storage.createFile(
-        bucketId: '67471025003b5f7d49e2',
+        bucketId: '67471025003b5f7d49e2', // Your Appwrite bucket ID
         fileId: ID.unique(),
         file: InputFile.fromBytes(
           bytes: bytes,
@@ -182,14 +187,19 @@ class ChallengeChatController extends GetxController {
         ],
       );
 
-      return _storage
-          .getFileView(
-            bucketId: '67471025003b5f7d49e2',
-            fileId: file.$id,
-          )
-          .toString();
+      // Get the direct view URL
+      final fileUrl = _storage.getFileView(
+        bucketId: '67471025003b5f7d49e2',
+        fileId: file.$id,
+      );
+
+      return fileUrl.toString();
     } catch (e) {
-      Get.snackbar('Upload Error', 'Failed to upload image: ${e.toString()}');
+      Get.snackbar(
+        'Upload Error',
+        'Failed to upload image: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return null;
     }
   }
