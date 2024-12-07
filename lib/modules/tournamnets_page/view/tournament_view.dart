@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gamers_gram/data/models/tournament_models.dart';
 import 'package:gamers_gram/modules/tournamnets_page/controllers/tournament_controller.dart';
 import 'package:gamers_gram/modules/tournamnets_page/view/create_tournament_view.dart';
+import 'package:gamers_gram/modules/tournamnets_page/view/tournament_details_view.dart';
 import 'package:get/get.dart';
 
 class TournamentView extends GetView<TournamentController> {
@@ -37,8 +38,7 @@ class TournamentView extends GetView<TournamentController> {
           children: [
             Expanded(
               child: Obx(() {
-                if (controller.isLoading.value &&
-                    controller.tournaments.isEmpty) {
+                if (controller.isLoading.value) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 return _buildTournamentList();
@@ -101,138 +101,17 @@ class TournamentView extends GetView<TournamentController> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () => controller.getTournamentDetails(tournament.id),
+        onTap: () => _showTournamentJoinDialog(tournament),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Tournament Name and Status
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      tournament.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(tournament.status),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      tournament.status,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
+              _buildCardHeader(tournament),
               const SizedBox(height: 8),
-
-              // Game and Date Info
-              Row(
-                children: [
-                  const Icon(Icons.videogame_asset, size: 16),
-                  const SizedBox(width: 4),
-                  Text(tournament.game),
-                  const SizedBox(width: 16),
-                  const Icon(Icons.calendar_today, size: 16),
-                  const SizedBox(width: 4),
-                  Text(_formatDate(tournament.startDate)),
-                ],
-              ),
+              _buildCardDetails(tournament),
               const SizedBox(height: 8),
-
-              // Participants Info
-              Row(
-                children: [
-                  const Icon(Icons.people, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Participants: ${tournament.participants?.length ?? 0}/${tournament.maxParticipants}',
-                    style: TextStyle(color: Colors.grey[700]),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Registration Deadline
-              Row(
-                children: [
-                  const Icon(Icons.timer, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Reg. Deadline: ${_formatDate(tournament.registrationEndDate)}',
-                    style: TextStyle(
-                      color: _isRegistrationClosed(tournament)
-                          ? Colors.red
-                          : Colors.green,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Prize Pool and Entry Fee
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Prize Pool: \$${tournament.prizePool.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                  Text(
-                    'Entry Fee: \$${tournament.entryFee.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Platform and Tournament Type
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Platform: ${tournament.platform}',
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  Text(
-                    'Type: ${tournament.format}',
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                ],
-              ),
-
-              // Join Tournament Button
-              if (_isTournamentJoinable(tournament))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: ElevatedButton(
-                    onPressed: () => _joinTournament(tournament),
-                    child: const Text('Join Tournament'),
-                  ),
-                ),
+              _buildCardFooter(tournament),
             ],
           ),
         ),
@@ -240,54 +119,138 @@ class TournamentView extends GetView<TournamentController> {
     );
   }
 
-  bool _isRegistrationClosed(Tournament tournament) {
-    return DateTime.now().isAfter(tournament.registrationEndDate);
+  Widget _buildCardHeader(Tournament tournament) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            tournament.name,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: controller.getStatusColor(tournament.status),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            tournament.status,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    );
   }
 
-  bool _isTournamentJoinable(Tournament tournament) {
-    final now = DateTime.now();
-    return now.isBefore(tournament.registrationEndDate) &&
-        tournament.status.toLowerCase() == 'open';
+  Widget _buildCardDetails(Tournament tournament) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.videogame_asset, size: 16),
+            const SizedBox(width: 8),
+            Text(tournament.game),
+            const SizedBox(width: 16),
+            const Icon(Icons.calendar_today, size: 16),
+            const SizedBox(width: 8),
+            Text(controller.formatDate(tournament.startDate)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Icon(Icons.people, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'Participants: ${tournament.participants?.length ?? 0}/${tournament.maxParticipants}',
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
-  Future<void> _joinTournament(Tournament tournament) async {
-    final success =
-        await controller.joinTournament(tournament.id as Tournament);
-    if (success) {
+  Widget _buildCardFooter(Tournament tournament) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Prize Pool: \$${tournament.prizePool.toStringAsFixed(2)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.green,
+          ),
+        ),
+        Text(
+          'Entry Fee: \$${tournament.entryFee.toStringAsFixed(2)}',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      ],
+    );
+  }
+
+  void _showTournamentJoinDialog(Tournament tournament) {
+    final TextEditingController teamNameController = TextEditingController();
+
+    if (!controller.isTournamentJoinable(tournament)) {
       Get.snackbar(
-        'Success',
-        'You have joined the tournament',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } else {
-      Get.snackbar(
-        'Error',
-        'Unable to join tournament',
-        snackPosition: SnackPosition.BOTTOM,
+        'Tournament Closed',
+        'Tournament registration is closed',
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+      return;
     }
-  }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'open':
-      case 'registration':
-        return Colors.green;
-      case 'ongoing':
-        return Colors.blue;
-      case 'completed':
-        return Colors.grey;
-      default:
-        return Colors.orange;
-    }
-  }
+    Get.defaultDialog(
+      title: 'Join Tournament',
+      content: TextField(
+        controller: teamNameController,
+        decoration: const InputDecoration(
+          labelText: 'Team Name',
+          hintText: 'Enter your team name',
+        ),
+      ),
+      textConfirm: 'Join',
+      textCancel: 'Cancel',
+      onConfirm: () async {
+        final teamName = teamNameController.text.trim();
+        if (teamName.isEmpty) {
+          Get.snackbar(
+            'Error',
+            'Please enter a team name',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+        final success = await controller.joinTournament(tournament, teamName);
+        if (success) {
+          Get.back(); // Close dialog
+          final tournamentDetails =
+              await controller.navigateToTournamentDetails(tournament.id);
+          if (tournamentDetails != null) {
+            Get.to(() => TournamentDetailsView(tournament: tournamentDetails));
+          }
+        } else {
+          Get.snackbar(
+            'Error',
+            'Unable to join tournament',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+        }
+      },
+    );
   }
 
   void _showFilterBottomSheet(BuildContext context) {
@@ -311,12 +274,7 @@ class TournamentView extends GetView<TournamentController> {
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: [
-                'CS:GO',
-                'DOTA 2',
-                'Valorant',
-                'PUBG',
-              ]
+              children: ['CS:GO', 'DOTA 2', 'Valorant', 'PUBG']
                   .map((game) => FilterChip(
                         label: Text(game),
                         selected: controller.selectedGameFilter.value == game,
@@ -332,12 +290,7 @@ class TournamentView extends GetView<TournamentController> {
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: [
-                'Open',
-                'Registration',
-                'Ongoing',
-                'Completed',
-              ]
+              children: ['Open', 'Registration', 'Ongoing', 'Completed']
                   .map((status) => FilterChip(
                         label: Text(status),
                         selected:

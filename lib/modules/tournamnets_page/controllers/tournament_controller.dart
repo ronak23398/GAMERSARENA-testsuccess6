@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:gamers_gram/data/models/tournament_models.dart';
 import 'package:gamers_gram/modules/auth/controllers/auth_controller.dart';
 import 'package:get/get.dart';
@@ -145,7 +146,7 @@ class TournamentController extends GetxController {
     }
   }
 
-  Future<bool> joinTournament(Tournament tournament) async {
+ Future<bool> joinTournament(Tournament tournament, String teamName) async {
     final userId = _auth.user.value?.uid;
     if (userId == null) return false;
 
@@ -154,6 +155,7 @@ class TournamentController extends GetxController {
 
       await tournamentRef.child('participants/$userId').set({
         'userId': userId,
+        'teamName': teamName,
         'joinedAt': DateTime.now().toIso8601String(),
         'status': 'active'
       });
@@ -162,6 +164,50 @@ class TournamentController extends GetxController {
     } catch (e) {
       print('Tournament join error: $e');
       return false;
+    }
+  }
+
+  Future<Tournament?> navigateToTournamentDetails(String tournamentId) async {
+    try {
+      final snapshot = await _database.child('tournaments/$tournamentId').get();
+
+      if (snapshot.exists) {
+        final tournament = Tournament.fromJson(
+            Map<String, dynamic>.from(snapshot.value as Map), tournamentId);
+        return tournament;
+      }
+      return null;
+    } catch (e) {
+      print('Tournament details fetch error: $e');
+      return null;
+    }
+  }
+
+  bool isRegistrationClosed(Tournament tournament) {
+    return DateTime.now().isAfter(tournament.registrationEndDate);
+  }
+
+  bool isTournamentJoinable(Tournament tournament) {
+    final now = DateTime.now();
+    return now.isBefore(tournament.registrationEndDate) &&
+        tournament.status.toLowerCase() == 'open';
+  }
+
+  String formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  Color getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'open':
+      case 'registration':
+        return Colors.green;
+      case 'ongoing':
+        return Colors.blue;
+      case 'completed':
+        return Colors.grey;
+      default:
+        return Colors.orange;
     }
   }
 

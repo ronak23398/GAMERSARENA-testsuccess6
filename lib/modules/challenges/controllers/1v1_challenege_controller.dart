@@ -46,6 +46,7 @@ class ChallengeController extends GetxController {
   }
 
   void _setupChallengeExpiryCheck() {
+    print("setupchallengeexpirycheck started");
     // Use Timer instead of Future.periodic for better control
     Timer.periodic(const Duration(hours: 1), (_) => _checkExpiredChallenges());
   }
@@ -150,6 +151,7 @@ class ChallengeController extends GetxController {
   }
 
   Future<bool> acceptChallenge(String challengeId) async {
+    print("challenge accepted ");
     final user = _auth.currentUser;
     if (user == null) {
       Get.snackbar('Error', 'User not logged in');
@@ -231,6 +233,7 @@ class ChallengeController extends GetxController {
   }
 
   Future<bool> declareWinner(String challengeId, String winnerId) async {
+    print("declare winner started");
     try {
       isProcessing.value = true;
 
@@ -352,6 +355,7 @@ class ChallengeController extends GetxController {
   }
 
   Future<void> _checkExpiredChallenges() async {
+    print("_checkExpiredChallenges started");
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
       final snapshot = await _db
@@ -393,6 +397,7 @@ class ChallengeController extends GetxController {
   List<ChallengeModel> get challenges => _challenges;
 
   Future<void> checkChallengeOutcome() async {
+    print("checkChallengeOutcome started");
     try {
       // Query for challenges in 'accepted' status with an outcome
       final snapshot = await _db
@@ -418,7 +423,7 @@ class ChallengeController extends GetxController {
           // Check if 10 minutes have passed since outcome selection
           if (currentTime - outcomeTimestamp > 600000) {
             // 10 minutes in milliseconds
-            await _resolveChallenge(entry.key, challengeData);
+            await resolveChallenge(entry.key, challengeData);
           }
         }
       }
@@ -427,8 +432,9 @@ class ChallengeController extends GetxController {
     }
   }
 
-  Future<void> _resolveChallenge(
+  Future<void> resolveChallenge(
       String challengeId, Map<String, dynamic> challengeData) async {
+    print("resolveChallenge started in challengecontroller");
     try {
       // Determine winner based on outcome
       final outcomeSenderId = challengeData['outcomeSenderId'];
@@ -470,6 +476,7 @@ class ChallengeController extends GetxController {
   }
 
   void _setupChallengeOutcomeCheck() {
+    print("_setupChallengeOutcomeCheck started in challengecontroller");
     // Check challenge outcomes every 5 minutes
     Timer.periodic(const Duration(minutes: 5), (_) => checkChallengeOutcome());
   }

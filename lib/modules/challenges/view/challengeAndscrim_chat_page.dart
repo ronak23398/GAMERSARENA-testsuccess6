@@ -28,47 +28,52 @@ class ChallengeChatPage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // Existing outcome selection indicator
-          Obx(() {
-            if (controller.hasSelectedOutcome.value) {
-              return Container(
-                decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 135, 46, 250)),
-                child: Column(
-                  children: [
-                    Text(
-                      "Time left for opponent to declare result",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: LinearProgressIndicator(
-                        value: controller.calculateRemainingTime(),
-                        backgroundColor: Colors.grey[300],
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          controller.isTimerRunning.value
+          // Countdown Timer Display
+          GetBuilder<ChallengeChatController>(
+            builder: (controller) {
+              if (controller.hasSelectedOutcome.value) {
+                final remainingTime = controller.getRemainingTime();
+                final minutes = remainingTime.inMinutes;
+                final seconds = remainingTime.inSeconds % 60;
+
+                return Container(
+                  color: const Color.fromARGB(255, 135, 46, 250),
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    children: [
+                      Text(
+                        controller.outcomeSelectedBy.value ==
+                                auth.currentUser?.uid
+                            ? "Waiting for opponent to declare result"
+                            : "Time left for you to declare result",
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "$minutes:${seconds.toString().padLeft(2, '0')}",
+                        style: TextStyle(
+                          color: controller.isTimerRunning.value
                               ? Colors.green
                               : Colors.red,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
 
           // Messages ListView
           Expanded(
             child: Obx(() {
               return ListView.builder(
-                reverse: true, // Newest messages at the bottom
                 itemCount: controller.messages.length,
                 itemBuilder: (context, index) {
-                  // Reverse index to show newest messages at the bottom
-                  final message = controller
-                      .messages[controller.messages.length - 1 - index];
+                  final message = controller.messages[index];
                   final isCurrentUser =
                       message['senderId'] == auth.currentUser?.uid;
 
@@ -92,7 +97,6 @@ class ChallengeChatPage extends StatelessWidget {
                           if (message['imageUrl'] != null)
                             GestureDetector(
                               onTap: () {
-                                // Optional: Implement full screen image view
                                 showDialog(
                                   context: context,
                                   builder: (_) => Dialog(
@@ -111,10 +115,10 @@ class ChallengeChatPage extends StatelessWidget {
                                 loadingBuilder:
                                     (context, child, loadingProgress) {
                                   if (loadingProgress == null) return child;
-                                  return CircularProgressIndicator();
+                                  return const CircularProgressIndicator();
                                 },
                                 errorBuilder: (context, error, stackTrace) {
-                                  return Icon(
+                                  return const Icon(
                                     Icons.error,
                                     color: Colors.red,
                                     size: 50,
@@ -142,22 +146,29 @@ class ChallengeChatPage extends StatelessWidget {
             }),
           ),
 
-          // Outcome selection buttons (if not selected)
+          // Outcome selection buttons
           Obx(() {
-            if (!controller.hasSelectedOutcome.value) {
+            // Check if outcome buttons should be shown
+            if (controller.shouldShowOutcomeButtons()) {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   ElevatedButton(
                     onPressed: () => controller.selectOutcome(context, true),
-                    style:
-                        ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      // Disable if an outcome has already been selected
+                      disabledBackgroundColor: Colors.green.withOpacity(0.5),
+                    ),
                     child: const Text('Win'),
                   ),
                   ElevatedButton(
                     onPressed: () => controller.selectOutcome(context, false),
-                    style:
-                        ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      // Disable if an outcome has already been selected
+                      disabledBackgroundColor: Colors.red.withOpacity(0.5),
+                    ),
                     child: const Text('Lose'),
                   ),
                 ],
@@ -175,7 +186,7 @@ class ChallengeChatPage extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.photo_library),
-                onPressed: () => controller.pickImage(ImageSource.gallery),
+                onPressed: () => controller.pickImage,
               ),
               Expanded(
                 child: TextField(

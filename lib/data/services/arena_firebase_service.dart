@@ -1,6 +1,6 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:gamers_gram/data/models/tournament_system_data_models.dart';
+import 'package:gamers_gram/data/models/arena_system_data_models.dart';
 
 class TournamentFirebaseService {
   final DatabaseReference _database = FirebaseDatabase.instance.ref();

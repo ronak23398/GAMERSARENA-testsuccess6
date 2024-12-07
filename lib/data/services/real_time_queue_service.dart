@@ -1,5 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
-import 'package:gamers_gram/data/models/tournament_system_data_models.dart';
+import 'package:gamers_gram/data/models/arena_system_data_models.dart';
 import 'dart:developer';
 
 class TournamentQueueService {

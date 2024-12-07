@@ -3,6 +3,8 @@ import 'package:appwrite/appwrite.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:gamers_gram/modules/challenges/controllers/1v1_challenege_controller.dart';
+import 'package:gamers_gram/modules/wallet/controllers/wallet_controller.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -12,6 +14,7 @@ class ChallengeChatController extends GetxController {
 
   final Rx<User?> _currentUser = Rx<User?>(FirebaseAuth.instance.currentUser);
   final _database = FirebaseDatabase.instance.ref();
+  final _walletController = Get.find<WalletController>();
 
   // Appwrite dependencies
   final Client _client;
@@ -32,81 +35,149 @@ class ChallengeChatController extends GetxController {
   Rx<DateTime?> outcomeSelectionTime = Rx<DateTime?>(null);
   RxBool isTimerRunning = RxBool(false);
   RxBool hasSelectedOutcome = RxBool(false);
+  RxString currentOutcome = RxString('');
+  RxString outcomeSelectedBy = RxString('');
+  RxBool bothClaimedWin = RxBool(false);
 
   // Timer for periodic updates
   Timer? _progressTimer;
 
   // Total time for outcome selection
-  final Duration totalTime = const Duration(minutes: 5);
+  final Duration totalTime = const Duration(minutes: 1);
 
   @override
   void onInit() {
     super.onInit();
     _loadChatMessages();
-    _checkPreviousOutcome();
+    _monitorChallengeOutcome();
   }
 
   void _loadChatMessages() {
     _database
         .child('challenge_chats/$challengeId/messages')
         .orderByChild('timestamp')
-        .onValue
+        .onChildAdded
         .listen((event) {
       if (event.snapshot.value != null) {
-        messages.value = (event.snapshot.value as Map)
-            .entries
-            .map((e) => {...e.value, 'key': e.key})
-            .toList();
+        final newMessage = {
+          ...?event.snapshot.value as Map,
+          'key': event.snapshot.key
+        };
+        messages.insert(0, newMessage);
       }
     });
   }
 
-  void _checkPreviousOutcome() {
-    _database.child('challenges/$challengeId/outcome').onValue.listen((event) {
-      final outcomeData = event.snapshot.value;
-      if (outcomeData != null) {
-        hasSelectedOutcome.value = true;
+  void _monitorChallengeOutcome() {
+    print("monitorchallengeoutcome started");
+    _database.child('challenges/$challengeId').onValue.listen((event) {
+      final challengeData = event.snapshot.value as Map?;
 
-        // Handle different potential timestamp formats
-        dynamic timestamp;
-        if (outcomeData is Map) {
-          timestamp = outcomeData['outcomeTimestamp'];
-        } else if (outcomeData is int) {
-          timestamp = outcomeData;
-        }
+      if (challengeData != null) {
+        // Check if outcomes have been selected
+        if (challengeData.containsKey('firstUserOutcome') &&
+            challengeData.containsKey('firstUserOutcomeTimestamp')) {
+          hasSelectedOutcome.value = true;
+          currentOutcome.value = challengeData['firstUserOutcome'] ?? '';
+          outcomeSelectedBy.value =
+              challengeData['firstUserOutcomeSenderId'] ?? '';
 
-        if (timestamp != null) {
-          outcomeSelectionTime.value = DateTime.fromMillisecondsSinceEpoch(
-              int.tryParse(timestamp.toString()) ?? 0);
-          _startTimer();
+          // Start timer when first outcome is selected
+          dynamic timestamp = challengeData['firstUserOutcomeTimestamp'];
+          if (timestamp != null) {
+            outcomeSelectionTime.value = DateTime.fromMillisecondsSinceEpoch(
+                int.tryParse(timestamp.toString()) ?? 0);
+            _startTimer();
+          }
+
+          // Check for second user's outcome
+          if (challengeData.containsKey('secondUserOutcome')) {
+            final secondUserOutcome = challengeData['secondUserOutcome'];
+            final firstUserOutcome = challengeData['firstUserOutcome'];
+
+            if (firstUserOutcome == 'win' && secondUserOutcome == 'win') {
+              bothClaimedWin.value = true;
+            }
+          }
         }
       }
     });
   }
 
   void _startTimer() {
-    // Cancel any existing timer
+    print("timer started");
     _progressTimer?.cancel();
 
     if (outcomeSelectionTime.value != null) {
       isTimerRunning.value = true;
 
       _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        // Check if 5 minutes have passed
-        if (DateTime.now().difference(outcomeSelectionTime.value!) >=
-            totalTime) {
+        final now = DateTime.now();
+        final difference = now.difference(outcomeSelectionTime.value!);
+
+        if (difference >= totalTime) {
+          _handleTimerExpiration();
           timer.cancel();
-          isTimerRunning.value = false;
-          update(); // Update UI
         }
 
-        // Trigger UI update
-        update();
+        update(); // Force UI update
       });
     }
   }
 
+  void _handleTimerExpiration() async {
+    print("timer stopped");
+
+    try {
+      // First, fetch the complete challenge data
+      final challengeSnapshot =
+          await _database.child('challenges/$challengeId').get();
+      final challengeData = challengeSnapshot.value as Map?;
+      print(" datat fetched from firebase $challengeData");
+
+      if (challengeData == null) {
+        print('No challenge data found');
+        return;
+      }
+
+      // Prepare resolution data
+      final Map<String, dynamic> resolutionData = {
+        'creatorId': challengeData['creatorId'],
+        'acceptorId': challengeData['acceptorId'],
+        'firstUserOutcome': currentOutcome.value,
+        'secondUserOutcome': 'loss', // Since no second outcome was selected
+        'firstUserOutcomeSenderId': outcomeSelectedBy.value,
+        'secondUserOutcomeSenderId':
+            challengeData['acceptorId'] != outcomeSelectedBy.value
+                ? challengeData['acceptorId']
+                : challengeData['creatorId']
+      };
+
+      // Update challenge status
+      await _database.child('challenges/$challengeId').update({
+        'finalOutcome': currentOutcome.value,
+        'winnerId': outcomeSelectedBy.value,
+        'status': 'completed',
+        'secondUserOutcome': 'loss'
+      });
+      print("updating challenge status ");
+
+      // Resolve challenge with complete data
+      await _resolveChallenge(challengeId, resolutionData);
+      print("resolvechallenge started");
+
+      isTimerRunning.value = false;
+      update();
+    } catch (e) {
+      print('Error in timer expiration: $e');
+    }
+  }
+
   void selectOutcome(BuildContext context, bool isWin) {
+    print("outcome selected ");
+    // Check if this is the first or second user selecting outcome
+    final isFirstUser = !hasSelectedOutcome.value;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,21 +192,46 @@ class ChallengeChatController extends GetxController {
           ),
           ElevatedButton(
             onPressed: () {
-              // Update Firebase database
-              _database.child('challenges/$challengeId').update({
-                'outcome': isWin ? 'win' : 'loss',
-                'outcomeSenderId': _currentUser.value?.uid,
-                'outcomeTimestamp': ServerValue.timestamp
-              });
+              if (isFirstUser) {
+                // First user selects outcome
+                _database.child('challenges/$challengeId').update({
+                  'firstUserOutcome': isWin ? 'win' : 'loss',
+                  'firstUserOutcomeSenderId': _currentUser.value?.uid,
+                  'firstUserOutcomeTimestamp': ServerValue.timestamp
+                });
 
-              // Set the outcome selection time
-              outcomeSelectionTime.value = DateTime.now();
-              hasSelectedOutcome.value = true;
+                // Set the outcome selection time
+                outcomeSelectionTime.value = DateTime.now();
+                hasSelectedOutcome.value = true;
+                currentOutcome.value = isWin ? 'win' : 'loss';
+                outcomeSelectedBy.value = _currentUser.value?.uid ?? '';
 
-              // Start the timer
-              _startTimer();
+                // Start the timer
+                _startTimer();
+              } else {
+                print("outcome seleced by second user");
+                // Second user selects outcome
+                _database.child('challenges/$challengeId').update({
+                  'secondUserOutcome': isWin ? 'win' : 'loss',
+                  'secondUserOutcomeSenderId': _currentUser.value?.uid,
+                });
 
-              Navigator.pop(context);
+                // Retrieve first user's outcome
+                final firstUserOutcome = currentOutcome.value;
+                final secondUserOutcome = isWin ? 'win' : 'loss';
+
+                // Resolve challenge based on outcomes
+                if (firstUserOutcome == secondUserOutcome) {
+                  // Both claim win or both claim loss
+                  _handleBothClaimedSameOutcome(context);
+                } else {
+                  // Different outcomes - proceed with challenge resolution
+
+                  ChallengeController().resolveChallenge(challengeId, {});
+                }
+
+                Navigator.pop(context);
+              }
             },
             child: const Text('Confirm'),
           ),
@@ -144,28 +240,118 @@ class ChallengeChatController extends GetxController {
     );
   }
 
-  double calculateRemainingTime() {
-    if (outcomeSelectionTime.value == null) return 0.0;
+  Future<void> _resolveChallenge(
+      String challengeId, Map<String, dynamic> resolutionData) async {
+    try {
+      final creatorId = resolutionData['creatorId'];
+      final acceptorId = resolutionData['acceptorId'];
+      final firstUserOutcome = resolutionData['firstUserOutcome'];
+      final secondUserOutcome = resolutionData['secondUserOutcome'];
+      final firstUserOutcomeSenderId =
+          resolutionData['firstUserOutcomeSenderId'];
+      final secondUserOutcomeSenderId =
+          resolutionData['secondUserOutcomeSenderId'];
 
-    final elapsedTime = DateTime.now().difference(outcomeSelectionTime.value!);
+      String winnerId;
+      String loserId;
 
-    // Ensure the value doesn't exceed 1.0
-    double progress = elapsedTime.inMilliseconds / totalTime.inMilliseconds;
-    return progress.clamp(0.0, 1.0);
+      // Logic to determine winner when outcomes differ
+      if (firstUserOutcome == 'win' && secondUserOutcome == 'loss') {
+        winnerId = firstUserOutcomeSenderId;
+        loserId = secondUserOutcomeSenderId;
+      } else if (firstUserOutcome == 'loss' && secondUserOutcome == 'win') {
+        winnerId = secondUserOutcomeSenderId;
+        loserId = firstUserOutcomeSenderId;
+      } else {
+        // This should not happen due to previous check, but added for completeness
+        throw Exception('Invalid outcome combination');
+      }
+
+      // Transfer winnings
+      final transferred = await _walletController.transferWinnings(
+        challengeId,
+        winnerId,
+        loserId,
+      );
+      print("winning transferred");
+
+      
+
+      if (transferred) {
+        // Update challenge status
+        await _database.child('challenges/$challengeId').update({
+          'status': 'completed',
+          'winnerId': winnerId,
+          'loserId': loserId,
+          'finalOutcome': winnerId == creatorId ? 'creatorWin' : 'acceptorWin',
+          'completedAt': ServerValue.timestamp
+        });
+      } else {
+        // Handle transfer failure (you might want to add specific error handling)
+        throw Exception('Winnings transfer failed');
+      }
+    } catch (e) {
+      print('Error resolving challenge: $e');
+      // Optionally, you could add more robust error handling here
+    }
   }
 
-  Future<void> sendMessage({String? message, String? imageUrl}) async {
-    if ((message == null || message.trim().isEmpty) && imageUrl == null) {
-      return;
-    }
+// New method to handle both users claiming same outcome
+  void _handleBothClaimedSameOutcome(BuildContext context) {
+    print("handlebothclaimedsameoutcome");
+    // Implement your logic for when both users claim the same outcome
+    // This could involve:
+    // - Splitting the stake
+    // - Cancelling the challenge
+    // - Requiring additional resolution
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Challenge Unresolved'),
+        content: const Text(
+            'Both users claimed the same outcome. Manual resolution required.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
-    await _database.child('challenge_chats/$challengeId/messages').push().set({
-      'senderId': _currentUser.value?.uid,
-      'senderName': _currentUser.value?.displayName ?? 'User',
-      'message': message?.trim(),
-      'imageUrl': imageUrl,
-      'timestamp': ServerValue.timestamp
-    });
+  void _handleBothClaimedWin(BuildContext context) {
+    print("handlebothclaimedwin");
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Conflict'),
+        content: const Text(
+          'Both users have claimed a win. Please review or contact support.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              // Option to change outcome
+              Navigator.pop(context);
+              selectOutcome(context, false); // Force to select loss
+            },
+            child: const Text('Change Outcome'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Escalate to admin
+              _database.child('challenges/$challengeId').update({
+                'status': 'admin_review',
+                'adminReviewReason': 'Both users claimed win'
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Escalate to Admin'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String?> _uploadImage(XFile imageFile) async {
@@ -204,6 +390,20 @@ class ChallengeChatController extends GetxController {
     }
   }
 
+  Future<void> sendMessage({String? message, String? imageUrl}) async {
+    if ((message == null || message.trim().isEmpty) && imageUrl == null) {
+      return;
+    }
+
+    await _database.child('challenge_chats/$challengeId/messages').push().set({
+      'senderId': _currentUser.value?.uid,
+      'senderName': _currentUser.value?.displayName ?? 'User',
+      'message': message?.trim(),
+      'imageUrl': imageUrl,
+      'timestamp': ServerValue.timestamp
+    });
+  }
+
   Future<void> pickImage(ImageSource source) async {
     final pickedFile = await ImagePicker().pickImage(
       source: source,
@@ -226,9 +426,24 @@ class ChallengeChatController extends GetxController {
     }
   }
 
+  Duration getRemainingTime() {
+    print("getremainingtime started");
+    if (outcomeSelectionTime.value == null) return Duration.zero;
+    final elapsedTime = DateTime.now().difference(outcomeSelectionTime.value!);
+    final remainingTime = totalTime - elapsedTime;
+    print("$remainingTime");
+    return remainingTime.isNegative ? Duration.zero : remainingTime;
+  }
+
+  bool shouldShowOutcomeButtons() {
+    print("$hasSelectedOutcome.value");
+    return !hasSelectedOutcome.value ||
+        (hasSelectedOutcome.value &&
+            outcomeSelectedBy.value != _currentUser.value?.uid);
+  }
+
   @override
   void onClose() {
-    // Cancel the timer if it's running
     _progressTimer?.cancel();
     messageController.dispose();
     super.onClose();

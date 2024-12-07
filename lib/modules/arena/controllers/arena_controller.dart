@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:gamers_gram/data/models/arena_chat_model.dart';
-import 'package:gamers_gram/data/models/tournament_system_data_models.dart';
+import 'package:gamers_gram/data/models/arena_system_data_models.dart';
 import 'package:gamers_gram/data/repository/user_repository.dart';
 import 'package:gamers_gram/data/services/auth_service.dart';
 import 'package:gamers_gram/modules/auth/controllers/auth_controller.dart';
