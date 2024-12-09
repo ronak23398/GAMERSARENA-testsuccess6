@@ -58,20 +58,35 @@ class _HomePageState extends State<HomePage>
 
     Get.dialog(
       AlertDialog(
-        title: const Text('Accept Scrim'),
+        backgroundColor: Colors.grey[900],
+        title: Text(
+          'Accept Scrim',
+          style: TextStyle(color: Colors.grey[200]),
+        ),
         content: TextField(
           controller: teamNameController,
-          decoration: const InputDecoration(
+          style: TextStyle(color: Colors.grey[200]),
+          decoration: InputDecoration(
             labelText: 'Your Team Name',
-            prefixIcon: Icon(Icons.group),
+            labelStyle: TextStyle(color: Colors.grey[400]),
+            prefixIcon: Icon(Icons.group, color: Colors.grey[400]),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey[700]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey[500]!),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey[700],
+            ),
             onPressed: () {
               final teamName = teamNameController.text.trim();
               if (teamName.isNotEmpty) {
@@ -81,10 +96,15 @@ class _HomePageState extends State<HomePage>
                   }
                 });
               } else {
-                Get.snackbar('Error', 'Please enter a team name');
+                Get.snackbar(
+                  'Error',
+                  'Please enter a team name',
+                  backgroundColor: Colors.grey[900],
+                  colorText: Colors.grey[200],
+                );
               }
             },
-            child: const Text('Accept'),
+            child: Text('Accept', style: TextStyle(color: Colors.grey[200])),
           ),
         ],
       ),
@@ -94,33 +114,40 @@ class _HomePageState extends State<HomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[900],
       appBar: AppBar(
-        title: const Text('Gaming Challenges'),
+        backgroundColor: Colors.grey[900],
+        title: Text(
+          'Gaming Challenges',
+          style: TextStyle(color: Colors.grey[200]),
+        ),
         bottom: TabBar(
           indicatorSize: TabBarIndicatorSize.tab,
-          indicatorColor: Colors.black,
-          indicatorWeight: 5,
+          indicatorColor: Colors.grey[500],
+          indicatorWeight: 3,
           controller: _tabController,
-          tabs: const [
+          tabs: [
             Tab(
-                child: Text(
-              "1v1",
-              style: TextStyle(color: Colors.white),
-            )),
+              child: Text(
+                "1v1",
+                style: TextStyle(color: Colors.grey[300]),
+              ),
+            ),
             Tab(
-                child: Text(
-              "Scrims",
-              style: TextStyle(color: Colors.white),
-            )),
+              child: Text(
+                "Scrims",
+                style: TextStyle(color: Colors.grey[300]),
+              ),
+            ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.wallet),
+            icon: Icon(Icons.wallet, color: Colors.grey[300]),
             onPressed: () => Get.toNamed("/wallet"),
           ),
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: Icon(Icons.logout, color: Colors.grey[300]),
             onPressed: () {
               AuthService().signOut();
             },
@@ -130,145 +157,195 @@ class _HomePageState extends State<HomePage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          Obx(() => ListView.builder(
-                itemCount: challengeController.challenges.length,
-                itemBuilder: (context, index) {
-                  final challenge = challengeController.challenges[index];
-                  final currentUser = FirebaseAuth.instance.currentUser;
-
-                  return Card(
-                    margin:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: ListTile(
-                      title: Text('${challenge.game} - ${challenge.server}'),
-                      subtitle: FutureBuilder<String>(
-                        future: getUserName(challenge.creatorId),
-                        builder: (context, snapshot) {
-                          return Text(snapshot.data ?? 'Loading...');
-                        },
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.currency_rupee, size: 16),
-                              Text(challenge.amount.toStringAsFixed(2)),
-                            ],
-                          ),
-                          const SizedBox(width: 8),
-                          if (challenge.status == 'accepted' &&
-                              (currentUser?.uid == challenge.creatorId ||
-                                  currentUser?.uid == challenge.acceptorId))
-                            ElevatedButton(
-                              onPressed: () => Get.to(
-                                () => ChallengeChatPage(
-                                    challengeId: challenge.id,
-                                    opponentId:
-                                        currentUser?.uid == challenge.creatorId
-                                            ? challenge.acceptorId ??
-                                                challenge.creatorId
-                                            : challenge.creatorId),
-                              ),
-                              child: const Text('Enter Challenge'),
-                            )
-                          else if (currentUser?.uid != challenge.creatorId)
-                            ElevatedButton(
-                              onPressed: () => challengeController
-                                  .acceptChallenge(challenge.id),
-                              child: const Text('Accept'),
-                            )
-                          else
-                            ElevatedButton(
-                              onPressed: () => challengeController
-                                  .cancelChallenge(challenge.id),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red),
-                              child: const Text('Cancel'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              )),
-          Obx(() => ListView.builder(
-              itemCount: scrimController.scrims.length,
-              itemBuilder: (context, index) {
-                final scrim = scrimController.scrims[index];
-                final currentUser = FirebaseAuth.instance.currentUser;
-
-                return Card(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    title: Text('${scrim.game} - ${scrim.server}'),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        FutureBuilder<String>(
-                          future: getUserName(scrim.creatorId),
-                          builder: (context, snapshot) {
-                            return Text(
-                                'Creator: ${snapshot.data ?? 'Loading...'}');
-                          },
-                        ),
-                        Text('Creator Team: ${scrim.creatorTeamName}'),
-                        if (scrim.acceptorTeamName != null)
-                          Text('Acceptor Team: ${scrim.acceptorTeamName}'),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.currency_rupee, size: 16),
-                            Text(scrim.amount.toStringAsFixed(2)),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                        if (scrim.status == 'accepted' &&
-                            (currentUser?.uid == scrim.creatorId ||
-                                currentUser?.uid == scrim.acceptorId))
-                          ElevatedButton(
-                            onPressed: () => Get.to(
-                              () => ChallengeChatPage(
-                                  challengeId: scrim.id,
-                                  opponentId:
-                                      currentUser?.uid == scrim.creatorId
-                                          ? scrim.acceptorId ?? scrim.creatorId
-                                          : scrim.creatorId),
-                            ),
-                            child: const Text('Enter Challenge'),
-                          )
-                        else if (currentUser?.uid != scrim.creatorId)
-                          ElevatedButton(
-                            onPressed: () => _showAcceptScrimDialog(scrim),
-                            child: const Text('Accept'),
-                          )
-                        else
-                          ElevatedButton(
-                            onPressed: () =>
-                                scrimController.cancelScrim(scrim.id),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red),
-                            child: const Text('Cancel'),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              })),
+          _buildChallengesList(),
+          _buildScrimsList(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateDialog(context),
-        child: const Icon(Icons.add),
+        backgroundColor: Colors.grey[700],
+        child: Icon(Icons.add, color: Colors.grey[200]),
       ),
     );
   }
-}
 
+  Widget _buildChallengesList() {
+    return Obx(() => ListView.builder(
+          itemCount: challengeController.challenges.length,
+          itemBuilder: (context, index) {
+            final challenge = challengeController.challenges[index];
+            final currentUser = FirebaseAuth.instance.currentUser;
+
+            return Card(
+              color: Colors.grey[850],
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ListTile(
+                title: Text(
+                  '${challenge.game} - ${challenge.server}',
+                  style: TextStyle(color: Colors.grey[200]),
+                ),
+                subtitle: FutureBuilder<String>(
+                  future: getUserName(challenge.creatorId),
+                  builder: (context, snapshot) {
+                    return Text(
+                      snapshot.data ?? 'Loading...',
+                      style: TextStyle(color: Colors.grey[400]),
+                    );
+                  },
+                ),
+                trailing: _buildChallengeActions(challenge, currentUser),
+              ),
+            );
+          },
+        ));
+  }
+
+  Widget _buildScrimsList() {
+    return Obx(() => ListView.builder(
+          itemCount: scrimController.scrims.length,
+          itemBuilder: (context, index) {
+            final scrim = scrimController.scrims[index];
+            final currentUser = FirebaseAuth.instance.currentUser;
+
+            return Card(
+              color: Colors.grey[850],
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ListTile(
+                title: Text(
+                  '${scrim.game} - ${scrim.server}',
+                  style: TextStyle(color: Colors.grey[200]),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FutureBuilder<String>(
+                      future: getUserName(scrim.creatorId),
+                      builder: (context, snapshot) {
+                        return Text(
+                          'Creator: ${snapshot.data ?? 'Loading...'}',
+                          style: TextStyle(color: Colors.grey[400]),
+                        );
+                      },
+                    ),
+                    Text(
+                      'Creator Team: ${scrim.creatorTeamName}',
+                      style: TextStyle(color: Colors.grey[400]),
+                    ),
+                    if (scrim.acceptorTeamName != null)
+                      Text(
+                        'Acceptor Team: ${scrim.acceptorTeamName}',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                  ],
+                ),
+                trailing: _buildScrimActions(scrim, currentUser),
+              ),
+            );
+          },
+        ));
+  }
+
+  Widget _buildChallengeActions(dynamic challenge, User? currentUser) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.currency_rupee, size: 16, color: Colors.grey[400]),
+            Text(
+              challenge.amount.toStringAsFixed(2),
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ],
+        ),
+        const SizedBox(width: 8),
+        _getChallengeActionButton(challenge, currentUser),
+      ],
+    );
+  }
+
+  Widget _buildScrimActions(ScrimModel scrim, User? currentUser) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.currency_rupee, size: 16, color: Colors.grey[400]),
+            Text(
+              scrim.amount.toStringAsFixed(2),
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ],
+        ),
+        const SizedBox(width: 8),
+        _getScrimActionButton(scrim, currentUser),
+      ],
+    );
+  }
+
+  Widget _getChallengeActionButton(dynamic challenge, User? currentUser) {
+    if (challenge.status == 'accepted' &&
+        (currentUser?.uid == challenge.creatorId ||
+            currentUser?.uid == challenge.acceptorId)) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
+        onPressed: () => Get.to(
+          () => ChallengeChatPage(
+            challengeId: challenge.id,
+            opponentId: currentUser?.uid == challenge.creatorId
+                ? challenge.acceptorId ?? challenge.creatorId
+                : challenge.creatorId,
+          ),
+        ),
+        child:
+            Text('Enter Challenge', style: TextStyle(color: Colors.grey[200])),
+      );
+    } else if (currentUser?.uid != challenge.creatorId) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
+        onPressed: () => challengeController.acceptChallenge(challenge.id),
+        child: Text('Accept', style: TextStyle(color: Colors.grey[200])),
+      );
+    } else {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.red[900]),
+        onPressed: () => challengeController.cancelChallenge(challenge.id),
+        child: Text('Cancel', style: TextStyle(color: Colors.grey[200])),
+      );
+    }
+  }
+
+  Widget _getScrimActionButton(ScrimModel scrim, User? currentUser) {
+    if (scrim.status == 'accepted' &&
+        (currentUser?.uid == scrim.creatorId ||
+            currentUser?.uid == scrim.acceptorId)) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
+        onPressed: () => Get.to(
+          () => ChallengeChatPage(
+            challengeId: scrim.id,
+            opponentId: currentUser?.uid == scrim.creatorId
+                ? scrim.acceptorId ?? scrim.creatorId
+                : scrim.creatorId,
+          ),
+        ),
+        child:
+            Text('Enter Challenge', style: TextStyle(color: Colors.grey[200])),
+      );
+    } else if (currentUser?.uid != scrim.creatorId) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
+        onPressed: () => _showAcceptScrimDialog(scrim),
+        child: Text('Accept', style: TextStyle(color: Colors.grey[200])),
+      );
+    } else {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.red[900]),
+        onPressed: () => scrimController.cancelScrim(scrim.id),
+        child: Text('Cancel', style: TextStyle(color: Colors.grey[200])),
+      );
+    }
+  }
+}

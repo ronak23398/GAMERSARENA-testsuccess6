@@ -264,53 +264,80 @@ class WalletController extends GetxController {
   Future<bool> transferWinnings(
       String challengeId, String winnerId, String loserId) async {
     try {
+      print('Starting transferWinnings for challenge: $challengeId');
       isLoading.value = true;
 
       final frozenFundsSnapshot =
           await _db.child('frozenFunds').child(challengeId).get();
+      print('Frozen funds snapshot exists: ${frozenFundsSnapshot.exists}');
 
-      if (!frozenFundsSnapshot.exists) return false;
+      if (!frozenFundsSnapshot.exists) {
+        print('No frozen funds found for challenge: $challengeId');
+        return false;
+      }
 
-      final frozenFunds =
-          Map<String, dynamic>.from(frozenFundsSnapshot.value as Map);
+      final frozenFunds = Map.from(frozenFundsSnapshot.value as Map);
+      print('Frozen funds: $frozenFunds');
+
       double totalAmount = 0;
 
       // Calculate total winnings
       frozenFunds.forEach((userId, data) {
-        final Map<String, dynamic> dataMap =
-            Map<String, dynamic>.from(data as Map);
+        final Map dataMap = Map.from(data as Map);
         final amount = (dataMap['amount'] as num).toDouble();
         totalAmount += amount;
+        print('User $userId contributed: $amount');
       });
 
+      print('Total amount to transfer: $totalAmount');
+
       // Update winner's wallet
+      print('Updating winner wallet for: $winnerId');
       await _db.child('wallets/$winnerId').update({
         'balance': ServerValue.increment(totalAmount),
         'frozenAmount': ServerValue.increment(-(totalAmount / 2)),
       });
 
+      // Record transaction only for the winner
+      print('Recording transaction for challenge: $challengeId');
+      await _db.child('wallets/$winnerId/transactions').push().set({
+        'type': 'win',
+        'amount': totalAmount,
+        'description': 'Challenge winnings received',
+        'challengeId': challengeId,
+        'timestamp': ServerValue.timestamp,
+        'status': 'completed'
+      });
+
       // Update loser's wallet
+      print('Updating loser wallet for: $loserId');
       await _db.child('wallets/$loserId').update({
         'frozenAmount': ServerValue.increment(-(totalAmount / 2)),
       });
 
-      // Record transactions
-      await recordTransaction(
-          type: 'win',
-          amount: totalAmount,
-          description: 'Challenge winnings received',
-          challengeId: challengeId,
-          status: 'completed');
+      // Record transaction for the loser
+      print('Recording transaction for loser: $loserId');
+      await _db.child('wallets/$loserId/transactions').push().set({
+        'type': 'loss',
+        'amount': totalAmount / 2,
+        'description': 'Challenge amount lost',
+        'challengeId': challengeId,
+        'timestamp': ServerValue.timestamp,
+        'status': 'completed'
+      });
 
       // Clear frozen funds
+      print('Removing frozen funds for challenge: $challengeId');
       await _db.child('frozenFunds').child(challengeId).remove();
 
+      print('Winnings transfer completed successfully');
       return true;
     } catch (e) {
       print('Error transferring winnings: $e');
       return false;
     } finally {
       isLoading.value = false;
+      print('Transfer process completed, loading state reset');
     }
   }
 

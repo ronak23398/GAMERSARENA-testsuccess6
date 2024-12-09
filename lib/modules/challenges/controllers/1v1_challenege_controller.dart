@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/material.dart';
 import 'package:gamers_gram/data/models/challenge_model.dart';
 import 'package:gamers_gram/modules/wallet/controllers/wallet_controller.dart';
 import 'package:get/get.dart';
@@ -411,6 +412,7 @@ class ChallengeController extends GetxController {
       final challenges = Map<String, dynamic>.from(snapshot.value as Map);
 
       for (var entry in challenges.entries) {
+        final challengeId = entry.key; // Get the challenge ID
         final challengeData = Map<String, dynamic>.from(entry.value);
 
         // Check if outcome has been selected
@@ -423,7 +425,7 @@ class ChallengeController extends GetxController {
           // Check if 10 minutes have passed since outcome selection
           if (currentTime - outcomeTimestamp > 600000) {
             // 10 minutes in milliseconds
-            await resolveChallenge(entry.key, challengeData);
+            await resolveChallenge(challengeId); // Pass the challenge ID here
           }
         }
       }
@@ -432,52 +434,360 @@ class ChallengeController extends GetxController {
     }
   }
 
-  Future<void> resolveChallenge(
-      String challengeId, Map<String, dynamic> challengeData) async {
-    print("resolveChallenge started in challengecontroller");
+  Future<Map<String, dynamic>> resolveChallenge(String challengeId) async {
     try {
-      // Determine winner based on outcome
-      final outcomeSenderId = challengeData['outcomeSenderId'];
-      final creatorId = challengeData['creatorId'];
-      final acceptorId = challengeData['acceptorId'];
-      final outcome = challengeData['outcome'];
+      print('Starting challenge resolution for challengeId: $challengeId');
 
-      String winnerId;
-      String loserId;
+      // Fetch the latest challenge data
+      final challengeSnapshot =
+          await _db.child('challenges').child(challengeId).get();
+      print('Challenge snapshot exists: ${challengeSnapshot.exists}');
 
-      if (outcome == 'win') {
-        // If outcome sender believes they won
-        winnerId = outcomeSenderId;
-        loserId = outcomeSenderId == creatorId ? acceptorId : creatorId;
-      } else {
-        // If outcome sender believes they lost
-        loserId = outcomeSenderId;
-        winnerId = outcomeSenderId == creatorId ? acceptorId : creatorId;
+      if (!challengeSnapshot.exists) {
+        print('Challenge not found for ID: $challengeId');
+        return _createErrorResponse(
+          'Challenge not found',
+          'CHALLENGE_NOT_FOUND',
+        );
       }
 
+      // Convert snapshot to map
+      final challengeData = Map<String, dynamic>.from(
+        challengeSnapshot.value as Map<dynamic, dynamic>,
+      );
+      print('Challenge data retrieved: $challengeData');
+
+      // Validate challenge is in a state that can be resolved
+      final validationResult = _validateChallengeResolution(challengeData);
+      print('Challenge validation result: ${validationResult['isValid']}');
+
+      if (!validationResult['isValid']) {
+        print('Challenge validation failed: ${validationResult['response']}');
+        return validationResult['response'];
+      }
+
+      // Determine winner and loser
+      final outcomeResult = _determineOutcome(challengeData);
+      print('Outcome determination result: ${outcomeResult['success']}');
+
+      if (!outcomeResult['success']) {
+        print('Outcome determination failed: ${outcomeResult['response']}');
+        return outcomeResult['response'];
+      }
+
+      final String winnerId = outcomeResult['winnerId'];
+      final String loserId = outcomeResult['loserId'];
+      print('Identified winnerId: $winnerId, loserId: $loserId');
+
+      // Determine final outcome type
+      final String finalOutcome =
+          winnerId == challengeData['creatorId'] ? 'creatorWin' : 'acceptorWin';
+      print('Final outcome determined: $finalOutcome');
+
       // Transfer winnings
+      final transferResult = await _performWinningsTransfer(
+          challengeId, winnerId, loserId, challengeData['amount']);
+      print('Winnings transfer result: ${transferResult['success']}');
+
+      if (!transferResult['success']) {
+        print('Winnings transfer failed: $transferResult');
+        return transferResult;
+      }
+
+      // Update challenge status in database
+      print('Updating challenge status');
+      await _updateChallengeStatus(
+          challengeId, winnerId, loserId, finalOutcome);
+
+      // Log successful resolution
+      print('Logging challenge resolution');
+      LoggingService().logChallengeResolution(
+          challengeId: challengeId,
+          winnerId: winnerId,
+          loserId: loserId,
+          amount: challengeData['amount']);
+
+      print('Challenge resolved successfully');
+      return {
+        'success': true,
+        'winnerId': winnerId,
+        'loserId': loserId,
+        'finalOutcome': finalOutcome,
+        'message': 'Challenge resolved successfully'
+      };
+    } catch (e, stackTrace) {
+      // Log unexpected errors
+      print('Unexpected error during challenge resolution: $e');
+      print('Stacktrace: $stackTrace');
+
+      LoggingService().logError(
+          context: 'Challenge Resolution', error: e, stackTrace: stackTrace);
+
+      return _createErrorResponse(
+          'Unexpected error during challenge resolution', 'UNEXPECTED_ERROR',
+          additionalDetails: e.toString());
+    }
+  }
+
+  Map<String, dynamic> _validateChallengeResolution(
+      Map<String, dynamic> challengeData) {
+    print('Starting challenge resolution validation');
+    print('Challenge Data: $challengeData');
+
+    // Check if challenge is already completed
+    if (challengeData['status'] == 'completed') {
+      print('Challenge already completed');
+      return {
+        'isValid': false,
+        'response': _createErrorResponse(
+            'Challenge already completed', 'CHALLENGE_ALREADY_COMPLETED')
+      };
+    }
+
+    final int currentTime = DateTime.now().millisecondsSinceEpoch;
+    final int expiresAt = challengeData['expiresAt'] ?? currentTime;
+    print('Current Time: $currentTime, Expires At: $expiresAt');
+
+    // Case 1: Only one user selected outcome
+    if ((challengeData['firstUserOutcome'] == null) !=
+        (challengeData['secondUserOutcome'] == null)) {
+      print('Only one user selected outcome');
+      final String? singleOutcome = challengeData['firstUserOutcome'] ??
+          challengeData['secondUserOutcome'];
+      print('Single Outcome: $singleOutcome');
+
+      if (singleOutcome == 'win') {
+        print('Single user selected win');
+        return {
+          'isValid': true,
+          'winner': singleOutcome == challengeData['firstUserOutcome']
+              ? challengeData['firstUserOutcomeSenderId']
+              : challengeData['creatorId'],
+          'resolution': 'SINGLE_USER_OUTCOME'
+        };
+      }
+
+      if (singleOutcome == 'loss') {
+        print('Single user selected loss');
+        return {
+          'isValid': true,
+          'winner': singleOutcome == challengeData['firstUserOutcome']
+              ? challengeData['creatorId']
+              : challengeData['firstUserOutcomeSenderId'],
+          'resolution': 'SINGLE_USER_OUTCOME'
+        };
+      }
+    }
+
+    // Case 2: Both users selected outcome
+    if (challengeData['firstUserOutcome'] != null &&
+        challengeData['secondUserOutcome'] != null) {
+      print('Both users selected outcomes');
+      print('First User Outcome: ${challengeData['firstUserOutcome']}');
+      print('Second User Outcome: ${challengeData['secondUserOutcome']}');
+
+      // Both claim win - requires admin resolution
+      if (challengeData['firstUserOutcome'] == 'win' &&
+          challengeData['secondUserOutcome'] == 'win') {
+        print('Both users claimed win - admin resolution required');
+        return {
+          'isValid': false,
+          'response': _createErrorResponse(
+              'Conflicting win claims require admin resolution',
+              'ADMIN_RESOLUTION_REQUIRED')
+        };
+      }
+
+      // Standard resolution logic
+      if (challengeData['firstUserOutcome'] == 'win') {
+        print('First user claimed win');
+        return {
+          'isValid': true,
+          'winner': challengeData['firstUserOutcomeSenderId'],
+          'resolution': 'STANDARD_RESOLUTION'
+        };
+      }
+
+      if (challengeData['secondUserOutcome'] == 'win') {
+        print('Second user claimed win');
+        return {
+          'isValid': true,
+          'winner': challengeData['acceptorId'],
+          'resolution': 'STANDARD_RESOLUTION'
+        };
+      }
+    }
+
+    // Fallback for unexpected scenarios
+    print('Unexpected resolution state');
+    return {
+      'isValid': false,
+      'response': _createErrorResponse(
+          'Invalid challenge resolution state', 'INVALID_RESOLUTION')
+    };
+  }
+
+  Map<String, dynamic> _determineOutcome(Map<String, dynamic> challengeData) {
+    print('Entering _determineOutcome method');
+    print('Challenge Data: $challengeData');
+
+    final firstUserOutcome = challengeData['firstUserOutcome'];
+    final secondUserOutcome = challengeData['secondUserOutcome'];
+    final firstUserOutcomeSenderId = challengeData['firstUserOutcomeSenderId'];
+    final secondUserOutcomeSenderId =
+        challengeData['secondUserOutcomeSenderId'];
+
+    print('First User Outcome: $firstUserOutcome');
+    print('Second User Outcome: $secondUserOutcome');
+    print('First User Outcome Sender ID: $firstUserOutcomeSenderId');
+    print('Second User Outcome Sender ID: $secondUserOutcomeSenderId');
+
+    // If only one user has selected an outcome
+    if ((firstUserOutcome == null) != (secondUserOutcome == null)) {
+      print('Only one user has selected an outcome');
+
+      final String? singleOutcome = firstUserOutcome ?? secondUserOutcome;
+      final String? singleOutcomeSenderId = firstUserOutcome != null
+          ? firstUserOutcomeSenderId
+          : secondUserOutcomeSenderId;
+      final String? otherId = firstUserOutcome != null
+          ? challengeData['acceptorId']
+          : challengeData['creatorId'];
+
+      print('Single Outcome: $singleOutcome');
+      print('Single Outcome Sender ID: $singleOutcomeSenderId');
+      print('Other User ID: $otherId');
+
+      if (singleOutcome == 'win') {
+        print('Single user claimed win');
+        return {
+          'success': true,
+          'winnerId': singleOutcomeSenderId,
+          'loserId': otherId
+        };
+      }
+
+      if (singleOutcome == 'loss') {
+        print('Single user claimed loss');
+        return {
+          'success': true,
+          'winnerId': otherId,
+          'loserId': singleOutcomeSenderId
+        };
+      }
+    }
+
+    // If outcomes are the same, return an error
+    if (firstUserOutcome == secondUserOutcome) {
+      print('Both users claimed the same outcome');
+      return {
+        'success': false,
+        'response': _createErrorResponse(
+            'Both users claimed the same outcome', 'SAME_OUTCOME')
+      };
+    }
+
+    // Determine winner based on different outcomes
+    String winnerId;
+    String loserId;
+
+    if (firstUserOutcome == 'win' && secondUserOutcome == 'loss') {
+      print('First user claimed win, second user claimed loss');
+      winnerId = firstUserOutcomeSenderId;
+      loserId = secondUserOutcomeSenderId;
+    } else if (firstUserOutcome == 'loss' && secondUserOutcome == 'win') {
+      print('First user claimed loss, second user claimed win');
+      winnerId = secondUserOutcomeSenderId;
+      loserId = firstUserOutcomeSenderId;
+    } else {
+      print('Unexpected outcome combination');
+      return {
+        'success': false,
+        'response': _createErrorResponse(
+            'Invalid outcome combination', 'INVALID_OUTCOME')
+      };
+    }
+
+    print('Final winner ID: $winnerId');
+    print('Final loser ID: $loserId');
+    return {'success': true, 'winnerId': winnerId, 'loserId': loserId};
+  }
+
+  /// Transfers winnings to the winner
+  Future<Map<String, dynamic>> _performWinningsTransfer(
+      String challengeId, String winnerId, String loserId, num amount) async {
+    try {
       final transferred = await _walletController.transferWinnings(
         challengeId,
         winnerId,
         loserId,
       );
 
-      if (transferred) {
-        // Update challenge status
-        await _db.child('challenges/$challengeId').update({
-          'status': 'completed',
-          'winnerId': winnerId,
-          'completedAt': ServerValue.timestamp
-        });
+      if (!transferred) {
+        return _createErrorResponse(
+            'Failed to transfer winnings', 'TRANSFER_FAILED');
       }
+
+      return {'success': true};
     } catch (e) {
-      print('Error resolving challenge: $e');
+      return _createErrorResponse('Winnings transfer error', 'TRANSFER_ERROR',
+          additionalDetails: e.toString());
     }
   }
 
-  void _setupChallengeOutcomeCheck() {
-    print("_setupChallengeOutcomeCheck started in challengecontroller");
-    // Check challenge outcomes every 5 minutes
-    Timer.periodic(const Duration(minutes: 5), (_) => checkChallengeOutcome());
+  /// Updates challenge status in the database
+  Future<void> _updateChallengeStatus(String challengeId, String winnerId,
+      String loserId, String finalOutcome) async {
+    await _db.child('challenges/$challengeId').update({
+      'status': 'completed',
+      'winnerId': winnerId,
+      'loserId': loserId,
+      'finalOutcome': finalOutcome,
+      'completedAt': ServerValue.timestamp
+    });
+  }
+
+  /// Creates a standardized error response
+  Map<String, dynamic> _createErrorResponse(String message, String errorCode,
+      {String? additionalDetails}) {
+    return {
+      'success': false,
+      'error': message,
+      'errorCode': errorCode,
+      if (additionalDetails != null) 'details': additionalDetails
+    };
+  }
+}
+
+void _setupChallengeOutcomeCheck() {
+  print("_setupChallengeOutcomeCheck started in challengecontroller");
+  // Check challenge outcomes every 5 minutes
+  Timer.periodic(
+      const Duration(minutes: 5), (_) => _setupChallengeOutcomeCheck());
+}
+
+/// Logging service to track challenge-related events
+class LoggingService {
+  void logChallengeResolution({
+    required String challengeId,
+    required String winnerId,
+    required String loserId,
+    required num amount,
+  }) {
+    // Implement your logging mechanism (e.g., Firebase Analytics, custom logging)
+    debugPrint(
+        'Challenge Resolved: $challengeId - Winner: $winnerId, Loser: $loserId, Amount: $amount');
+  }
+
+  void logError({
+    required String context,
+    required Object error,
+    StackTrace? stackTrace,
+  }) {
+    // Implement error logging (e.g., Crashlytics, custom error tracking)
+    debugPrint('Error in $context: $error');
+    if (stackTrace != null) {
+      debugPrint('Stack Trace: $stackTrace');
+    }
   }
 }

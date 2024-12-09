@@ -19,8 +19,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Gaming Platform',
-      theme: AppTheme.lightTheme,
+      title: 'Gaming Platform',  
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
       initialRoute: '/login',
