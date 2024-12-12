@@ -10,6 +10,8 @@ import 'package:gamers_gram/modules/marketplace/bindings/market_bindings.dart';
 import 'package:gamers_gram/modules/marketplace/view/marketplace_view.dart';
 import 'package:gamers_gram/modules/navigation/navigation_view.dart';
 import 'package:gamers_gram/modules/profile/bindings/profile_bindings.dart';
+import 'package:gamers_gram/modules/profile/bindings/team_bindings.dart';
+import 'package:gamers_gram/modules/profile/view/team_view.dart';
 import 'package:gamers_gram/modules/tournamnets_page/bindings/tournament_bindings.dart';
 import 'package:gamers_gram/modules/tournamnets_page/view/tournament_view.dart';
 import 'package:gamers_gram/modules/wallet/bindings/wallet_bindings.dart';
@@ -51,11 +53,15 @@ class AppPages {
       binding: ArenaBindings(),
       middlewares: [AuthGuard()],
     ),
-   
     GetPage(
-      name: '/market',
+      name: '/tournament',
       page: () => const TournamentView(),
       binding: TournamentBinding(),
+    ),
+    GetPage(
+      name: '/teamManagement',
+      page: () => TeamManagementPage(),
+      binding: TeamBindings(),
     ),
     GetPage(
       name: '/mainpage',
@@ -68,6 +74,7 @@ class AppPages {
         ChatBinding(),
         ProfileBindings(),
         TournamentBinding(),
+        TeamBindings()
       ],
       middlewares: [AuthGuard()], // Add auth guard if needed
     ),

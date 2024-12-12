@@ -320,7 +320,7 @@ class WalletController extends GetxController {
       await _db.child('wallets/$loserId/transactions').push().set({
         'type': 'loss',
         'amount': totalAmount / 2,
-        'description': 'Challenge amount lost',
+        'description': 'Challenge lost',
         'challengeId': challengeId,
         'timestamp': ServerValue.timestamp,
         'status': 'completed'

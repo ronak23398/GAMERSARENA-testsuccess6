@@ -44,17 +44,6 @@ class TournamentView extends GetView<TournamentController> {
                 return _buildTournamentList();
               }),
             ),
-            Obx(() => controller.hasMoreData.value
-                ? Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      onPressed: () => controller.currentTabIndex.value == 0
-                          ? controller.fetchTournaments()
-                          : controller.fetchMyTournaments(),
-                      child: const Text('Load More Tournaments'),
-                    ),
-                  )
-                : const SizedBox.shrink()),
           ],
         ),
       ),

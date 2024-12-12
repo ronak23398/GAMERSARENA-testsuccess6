@@ -5,6 +5,8 @@ class UserModel {
   final double walletBalance;
   final List<dynamic> challenges;
   final List<dynamic> tournaments;
+  String? currentTeamId;
+  List<String>? teamIds;
 
   // New optional team name fields
   final String? valorantTeam;
@@ -21,6 +23,7 @@ class UserModel {
     this.valorantTeam,
     this.cs2Team,
     this.bgmiTeam,
+    this.teamIds,
   });
 
   // Convert UserModel to a Map for Firebase
@@ -35,6 +38,7 @@ class UserModel {
       'valorantTeam': valorantTeam,
       'cs2Team': cs2Team,
       'bgmiTeam': bgmiTeam,
+      'teamIds': teamIds ?? [],
     };
   }
 
@@ -50,6 +54,7 @@ class UserModel {
       valorantTeam: map['valorantTeam'],
       cs2Team: map['cs2Team'],
       bgmiTeam: map['bgmiTeam'],
+      teamIds: List<String>.from(map['teamIds'] ?? []),
     );
   }
 }

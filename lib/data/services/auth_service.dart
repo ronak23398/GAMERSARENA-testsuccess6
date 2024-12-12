@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:gamers_gram/data/models/user_model.dart';
 import 'package:get/get.dart';
 
 class AuthService extends GetxService {
@@ -21,6 +22,16 @@ class AuthService extends GetxService {
     } catch (e) {
       rethrow;
     }
+  }
+
+  Future<UserModel?> getCurrentUserModel(dynamic userService) async {
+    final userId = getCurrentUserId();
+    if (userId != null) {
+      // Fetch user from database or create UserModel
+      // This depends on how you store user data
+      return await userService.getUserById(userId);
+    }
+    return null;
   }
 
   String? getCurrentUserId() {

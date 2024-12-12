@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gamers_gram/data/models/user_model.dart';
+import 'package:gamers_gram/data/services/auth_service.dart';
+import 'package:gamers_gram/modules/auth/controllers/auth_controller.dart';
 import 'package:gamers_gram/modules/profile/controllers/profile_controller.dart';
+import 'package:gamers_gram/modules/profile/controllers/team_controller.dart';
+import 'package:gamers_gram/modules/profile/view/team_view.dart';
 import 'package:get/get.dart';
 
 class ProfileView extends GetView<ProfileController> {
@@ -20,6 +24,18 @@ class ProfileView extends GetView<ProfileController> {
             icon: const Icon(Icons.logout),
             onPressed: () => controller.logout(),
           ),
+          ElevatedButton(
+            onPressed: () {
+              Get.toNamed("/teamManagement");
+            },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Text('My Teams'),
+          )
         ],
       ),
       body: Obx(() {

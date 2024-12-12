@@ -332,7 +332,7 @@ class _HomePageState extends State<HomePage>
           ),
         ),
         child:
-            Text('Enter Challenge', style: TextStyle(color: Colors.grey[200])),
+            Text('Enter Scrim Chat', style: TextStyle(color: Colors.grey[200])),
       );
     } else if (currentUser?.uid != scrim.creatorId) {
       return ElevatedButton(
