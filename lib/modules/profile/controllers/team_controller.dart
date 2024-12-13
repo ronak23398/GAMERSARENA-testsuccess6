@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:gamers_gram/data/models/team_model.dart';
 import 'package:gamers_gram/data/models/user_model.dart';
 import 'package:gamers_gram/data/services/auth_service.dart';
-import 'package:gamers_gram/modules/profile/view/team_view.dart';
 import 'package:get/get.dart';
 
 class TeamController extends GetxController {
@@ -14,13 +13,14 @@ class TeamController extends GetxController {
 
   final AuthService _authService = Get.find<AuthService>();
 
-  // List to store all team memberships
+  // Fetch user's teams
   Future<void> fetchUserTeams() async {
     try {
       String? currentUserUid = _authService.getCurrentUserId();
+      print('[DEBUG] Fetching user teams for user ID: $currentUserUid');
 
       if (currentUserUid == null) {
-        print('No current user found');
+        print('[ERROR] No current user found');
         Get.snackbar('Error', 'User not authenticated');
         return;
       }
@@ -29,61 +29,101 @@ class TeamController extends GetxController {
       DatabaseEvent userEvent =
           await _database.ref('users/$currentUserUid').once();
 
+      // Ensure userData is not null and is a Map
+      if (userEvent.snapshot.value == null) {
+        print('[ERROR] User data is null');
+        return;
+      }
+
       Map<String, dynamic> userData =
           Map<String, dynamic>.from(userEvent.snapshot.value as Map);
+      print('[DEBUG] User data retrieved: $userData');
 
-      List<dynamic> teamIds = userData['teamIds'] ?? [];
+      // Ensure teamIds is a list
+      List<dynamic> teamIds = List.from(userData['teamIds'] ?? []);
+      print('[DEBUG] Team IDs found: $teamIds');
 
       userTeams.clear();
 
       // Fetch teams based on teamIds
       for (String teamId in teamIds) {
+        print('[DEBUG] Fetching details for team ID: $teamId');
         DatabaseEvent teamEvent = await _database.ref('teams/$teamId').once();
 
         if (teamEvent.snapshot.value != null) {
           Map<String, dynamic> teamData =
               Map<String, dynamic>.from(teamEvent.snapshot.value as Map);
 
+          print('[DEBUG] Team Data for $teamId: $teamData');
+
           TeamModel team = TeamModel.fromJson(teamData, teamId);
           userTeams.add(team);
+          print('[DEBUG] Team added: ${team.name}');
+        } else {
+          print('[WARNING] No data found for team ID: $teamId');
         }
       }
 
-      // Set current team logic remains similar
+      // Handle current team logic
       String? currentTeamId = userData['currentTeamId'];
+      print('[DEBUG] Current team ID from user data: $currentTeamId');
 
       if (currentTeamId != null) {
         try {
-          currentTeam.value =
-              userTeams.firstWhere((team) => team.teamId == currentTeamId);
+          currentTeam.value = userTeams.firstWhere(
+            (team) => team.teamId == currentTeamId,
+            orElse: () => userTeams.isNotEmpty
+                ? userTeams.first
+                : TeamModel(
+                    name: '',
+                    tag: '',
+                    username: '',
+                    owner: '',
+                    members: {}), // Use a default TeamModel instead of null
+          );
+          print('[DEBUG] Current team set to: ${currentTeam.value?.name}');
         } catch (e) {
-          print('Could not find current team: $e');
+          print('[ERROR] Could not find current team: $e');
           currentTeam.value = userTeams.isNotEmpty ? userTeams.first : null;
         }
       } else if (userTeams.isNotEmpty) {
         currentTeam.value = userTeams.first;
+        print(
+            '[DEBUG] No current team, setting to first team: ${currentTeam.value?.name}');
       }
     } catch (e) {
-      print('Comprehensive Error in fetchUserTeams: $e');
+      print('[ERROR] Comprehensive Error in fetchUserTeams: $e');
       Get.snackbar('Error', 'Failed to fetch teams: $e');
     }
   }
 
-  // Method to set current team for user
+  // Set current team for user
   Future<void> setCurrentTeam(TeamModel team) async {
     try {
       String? currentUserUid = _authService.getCurrentUserId();
-      if (currentUserUid == null) return;
+      print('[DEBUG] Setting current team for user ID: $currentUserUid');
+
+      if (currentUserUid == null) {
+        print('[ERROR] No current user found when setting team');
+        return;
+      }
+
+      if (team.teamId == null) {
+        print('[ERROR] Team ID is null');
+        return;
+      }
 
       // Update user's profile with current team ID
       await _database
           .ref('users/$currentUserUid/currentTeamId')
           .set(team.teamId);
+      print('[DEBUG] Updated user profile with team ID: ${team.teamId}');
 
       // Set current team in controller
       currentTeam.value = team;
+      print('[DEBUG] Current team set to: ${team.name}');
     } catch (e) {
-      print('Error setting current team: $e');
+      print('[ERROR] Error setting current team: $e');
       Get.snackbar('Error', 'Failed to set current team');
     }
   }
@@ -91,106 +131,120 @@ class TeamController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    print('[DEBUG] TeamController initialized');
     _listenToTeamInvitations();
-    fetchUserTeams(); // Fetch teams when controller initializes
-    _listenToTeamInvitations();
+    fetchUserTeams();
   }
 
   // Create a new team
-  Future<void> createTeam(
-      {required String name,
-      required String tag,
-      required BuildContext context,
-      required String ownerUid}) async {
+  Future<void> createTeam({
+    required String name,
+    required String tag,
+    required BuildContext context,
+    required String ownerUid,
+  }) async {
     try {
-      // Get current user ID
+      // Dismiss keyboard
+      FocusScope.of(context).unfocus();
+
+      // Get current user ID and username
       String? currentUserUid = _authService.getCurrentUserId();
+      print('[DEBUG] Creating team. Current user ID: $currentUserUid');
 
       if (currentUserUid == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No authenticated user found')),
-        );
+        _showErrorMessage(context, 'No authenticated user found');
         return;
       }
 
+      // Fetch current user's username
+      DatabaseEvent userEvent =
+          await _database.ref('users/$currentUserUid').once();
+      Map<dynamic, dynamic> userData =
+          userEvent.snapshot.value as Map<dynamic, dynamic>;
+      String currentUsername = userData['username'] ?? 'Unknown';
+
       // Validate inputs
-      if (name.isEmpty || tag.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Team name and tag cannot be empty')),
-        );
+      if (name.trim().isEmpty || tag.trim().isEmpty) {
+        _showErrorMessage(context, 'Team name and tag cannot be empty');
         return;
       }
 
       // Generate a new team ID
       DatabaseReference teamRef = _database.ref().child('teams').push();
       String? newTeamId = teamRef.key;
+      print('[DEBUG] Generated new team ID: $newTeamId');
 
       if (newTeamId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate team ID')),
-        );
+        _showErrorMessage(context, 'Failed to generate team ID');
         return;
       }
 
       // Create team model
       TeamModel newTeam = TeamModel(
-          teamId: newTeamId,
-          name: name,
-          tag: tag,
-          owner: currentUserUid,
-          members: {
-            currentUserUid: {'role': 'owner', 'joinedAt': ServerValue.timestamp}
-          });
+        teamId: newTeamId,
+        name: name,
+        tag: tag,
+        owner: currentUserUid,
+        username: currentUsername,
+        members: {
+          currentUserUid: {
+            'role': 'owner',
+            'username': currentUsername,
+            'joinedAt': ServerValue.timestamp,
+          }
+        },
+      );
 
       // Save team to database
       await teamRef.set(newTeam.toJson());
+      print('[DEBUG] New team saved to database: ${newTeam.name}');
 
       // Update user's team information
       DatabaseReference userRef = _database.ref('users/$currentUserUid');
+      DatabaseEvent userDataEvent = await userRef.once();
+      Map<dynamic, dynamic> existingUserData =
+          userDataEvent.snapshot.value as Map<dynamic, dynamic>;
 
-      // Fetch current user data
-      DatabaseEvent userEvent = await userRef.once();
-
-      // Convert snapshot to map
-      Map<dynamic, dynamic> userData =
-          userEvent.snapshot.value as Map<dynamic, dynamic>;
-
-      // Prepare team IDs list
-      List<dynamic> teamIds = userData['teamIds'] ?? [];
-
-      // Add new team ID
+      List<dynamic> teamIds = List.from(existingUserData['teamIds'] ?? []);
       if (!teamIds.contains(newTeamId)) {
         teamIds.add(newTeamId);
       }
 
-      // Update user's data
       await userRef.update({'teamIds': teamIds, 'currentTeamId': newTeamId});
+      await userRef.update({
+        'valorantTeam': name,
+      });
 
       // Update local state
       currentTeam.value = newTeam;
       userTeams.add(newTeam);
 
       // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Team created successfully')),
-      );
-
-      // Navigate to team view or close creation screen
-      Get.to(() => TeamManagementPage());
+      Get.snackbar('Success', 'Team created successfully');
     } catch (e) {
-      // Handle any errors
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create team: ${e.toString()}')),
-      );
-      print('Team Creation Error: $e');
+      print('[ERROR] Team Creation Error: $e');
+      _showErrorMessage(context, 'Failed to create team: ${e.toString()}');
     }
   }
 
+  // Helper method to show error messages
+  void _showErrorMessage(BuildContext context, String message) {
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   // Invite a user to team
-  Future<void> inviteUserToTeam(
-      {required String username, required String teamId}) async {
+  Future<void> inviteUserToTeam({
+    required String username,
+    required String teamId,
+  }) async {
     try {
-      // First, find user by username
+      print('[DEBUG] Attempting to invite user: $username to team: $teamId');
+
+      // Find user by username
       DatabaseEvent event = await _database
           .ref('users')
           .orderByChild('username')
@@ -201,6 +255,18 @@ class TeamController extends GetxController {
         Map<dynamic, dynamic> users =
             event.snapshot.value as Map<dynamic, dynamic>;
         String userUid = users.keys.first;
+        print('[DEBUG] Found user ID for $username: $userUid');
+
+        // Fetch inviting user's username
+        String? currentUserUid = _authService.getCurrentUserId();
+        String invitingUsername = 'Unknown';
+        if (currentUserUid != null) {
+          DatabaseEvent inviterEvent =
+              await _database.ref('users/$currentUserUid').once();
+          Map<dynamic, dynamic> inviterData =
+              inviterEvent.snapshot.value as Map<dynamic, dynamic>;
+          invitingUsername = inviterData['username'] ?? 'Unknown';
+        }
 
         // Add invitation to team
         DatabaseReference invitationRef =
@@ -209,14 +275,18 @@ class TeamController extends GetxController {
         await invitationRef.set({
           'status': 'pending',
           'invitedAt': ServerValue.timestamp,
-          'invitedBy': userUid
+          'invitedBy': currentUserUid,
+          'invitedByUsername': invitingUsername,
         });
+        print('[DEBUG] Invitation sent to $username');
 
         Get.snackbar('Success', 'Invitation sent to $username');
       } else {
+        print('[ERROR] User not found: $username');
         Get.snackbar('Error', 'User not found');
       }
     } catch (e) {
+      print('[ERROR] Failed to invite user: $e');
       Get.snackbar('Error', 'Failed to invite user: ${e.toString()}');
     }
   }
@@ -225,40 +295,61 @@ class TeamController extends GetxController {
   Future<void> acceptTeamInvitation(String teamId) async {
     try {
       String? currentUserUid = _authService.getCurrentUserId();
+      if (currentUserUid == null) return;
+
+      // Fetch current user's username
+      DatabaseEvent userEvent =
+          await _database.ref('users/$currentUserUid').once();
+      Map<dynamic, dynamic> userData =
+          userEvent.snapshot.value as Map<dynamic, dynamic>;
+      String currentUsername = userData['username'] ?? 'Unknown';
 
       // Update team members
-      await _database
-          .ref('teams/$teamId/members/$currentUserUid')
-          .set({'role': 'member', 'joinedAt': ServerValue.timestamp});
+      await _database.ref('teams/$teamId/members/$currentUserUid').set({
+        'role': 'member',
+        'username': currentUsername,
+        'joinedAt': ServerValue.timestamp
+      });
 
       // Remove invitation
       await _database.ref('teams/$teamId/invitations/$currentUserUid').remove();
 
-      // Update user's current team
-      await _database.ref('users/$currentUserUid/currentTeamId').set(teamId);
+      // Update user's team information
+      DatabaseReference userRef = _database.ref('users/$currentUserUid');
+      DatabaseEvent userDataEvent = await userRef.once();
+      Map<dynamic, dynamic> existingUserData =
+          userDataEvent.snapshot.value as Map<dynamic, dynamic>;
+
+      List<dynamic> teamIds = List.from(existingUserData['teamIds'] ?? []);
+      if (!teamIds.contains(teamId)) {
+        teamIds.add(teamId);
+      }
+
+      // Update user's current team and team list
+      await userRef.update({'teamIds': teamIds, 'currentTeamId': teamId});
 
       Get.snackbar('Success', 'Team invitation accepted');
+
+      // Refresh teams
+      await fetchUserTeams();
     } catch (e) {
       Get.snackbar('Error', 'Failed to accept invitation: ${e.toString()}');
     }
   }
 
-  Rx<List<TeamInvitation>> pendingInvitations = Rx<List<TeamInvitation>>([]);
-
-  // Listen to team invitations for current user
+  // Listen to team invitations
   void _listenToTeamInvitations() {
     String? currentUserUid = _authService.getCurrentUserId();
+    if (currentUserUid == null) return;
 
     _database.ref('teams').onValue.listen((event) {
       List<TeamInvitation> invitations = [];
 
-      // Iterate through all teams
       Map<dynamic, dynamic>? teamsData =
           event.snapshot.value as Map<dynamic, dynamic>?;
 
       if (teamsData != null) {
         teamsData.forEach((teamId, teamData) {
-          // Check if this team has an invitation for current user
           Map<dynamic, dynamic>? teamInvitations = teamData['invitations'];
 
           if (teamInvitations != null &&
@@ -269,7 +360,7 @@ class TeamController extends GetxController {
               invitations.add(TeamInvitation(
                 teamId: teamId,
                 teamName: teamData['name'],
-                invitedBy: invitationData['invitedBy'],
+                invitedBy: invitationData['invitedByUsername'] ?? 'Unknown',
                 invitedAt: DateTime.fromMillisecondsSinceEpoch(
                     invitationData['invitedAt']),
               ));
@@ -286,6 +377,7 @@ class TeamController extends GetxController {
   Future<void> declineTeamInvitation(String teamId) async {
     try {
       String? currentUserUid = _authService.getCurrentUserId();
+      if (currentUserUid == null) return;
 
       // Remove invitation
       await _database.ref('teams/$teamId/invitations/$currentUserUid').remove();
@@ -295,6 +387,140 @@ class TeamController extends GetxController {
       Get.snackbar('Error', 'Failed to decline invitation: ${e.toString()}');
     }
   }
+
+  // Leave the current team
+  Future<void> leaveTeam() async {
+    try {
+      String? currentUserUid = _authService.getCurrentUserId();
+      if (currentUserUid == null) {
+        Get.snackbar('Error', 'No authenticated user found');
+        return;
+      }
+
+      if (currentTeam.value == null) {
+        Get.snackbar('Error', 'No current team selected');
+        return;
+      }
+
+      // Check if user is the owner
+      if (currentTeam.value!.owner == currentUserUid) {
+        Get.snackbar('Error',
+            'Team owner must promote another member to admin before leaving');
+        return;
+      }
+
+      // Remove user from team members
+      await _database
+          .ref('teams/${currentTeam.value!.teamId}/members/$currentUserUid')
+          .remove();
+
+      // Remove team from user's team list
+      DatabaseReference userRef = _database.ref('users/$currentUserUid');
+      DatabaseEvent userDataEvent = await userRef.once();
+      Map<dynamic, dynamic> existingUserData =
+          userDataEvent.snapshot.value as Map<dynamic, dynamic>;
+
+      List<dynamic> teamIds = List.from(existingUserData['teamIds'] ?? []);
+      teamIds.remove(currentTeam.value!.teamId);
+
+      // Update user's team information
+      await userRef.update({
+        'teamIds': teamIds,
+        'currentTeamId': teamIds.isNotEmpty ? teamIds.first : null
+      });
+
+      // Refresh teams
+      await fetchUserTeams();
+
+      Get.snackbar('Success', 'You have left the team');
+    } catch (e) {
+      print('[ERROR] Leave team error: $e');
+      Get.snackbar('Error', 'Failed to leave team: ${e.toString()}');
+    }
+  }
+
+// Promote a member to admin
+  // In TeamController class
+// Promote a member to admin
+  Future<void> promoteMemberToAdmin(String memberUid) async {
+    try {
+      String? currentUserUid = _authService.getCurrentUserId();
+      if (currentUserUid == null) {
+        Get.snackbar('Error', 'No authenticated user found');
+        return;
+      }
+
+      if (currentTeam.value == null) {
+        Get.snackbar('Error', 'No current team selected');
+        return;
+      }
+
+      // Verify that only the owner can promote
+      if (currentTeam.value!.owner != currentUserUid) {
+        Get.snackbar('Error', 'Only team owner can promote members');
+        return;
+      }
+
+      // Update member's role to admin
+      await _database
+          .ref('teams/${currentTeam.value!.teamId}/members/$memberUid/role')
+          .set('admin');
+
+      Get.snackbar('Success', 'Member promoted to admin');
+    } catch (e) {
+      print('[ERROR] Promote member error: $e');
+      Get.snackbar('Error', 'Failed to promote member: ${e.toString()}');
+    }
+  }
+
+// Remove a member from the team
+  Future<void> removeMemberFromTeam(String memberUid) async {
+    try {
+      String? currentUserUid = _authService.getCurrentUserId();
+      if (currentUserUid == null) {
+        Get.snackbar('Error', 'No authenticated user found');
+        return;
+      }
+
+      if (currentTeam.value == null) {
+        Get.snackbar('Error', 'No current team selected');
+        return;
+      }
+
+      // Verify that only the owner can remove members
+      if (currentTeam.value!.owner != currentUserUid) {
+        Get.snackbar('Error', 'Only team owner can remove members');
+        return;
+      }
+
+      // Remove user from team members
+      await _database
+          .ref('teams/${currentTeam.value!.teamId}/members/$memberUid')
+          .remove();
+
+      // Remove team from user's team list
+      DatabaseReference userRef = _database.ref('users/$memberUid');
+      DatabaseEvent userDataEvent = await userRef.once();
+      Map<dynamic, dynamic> existingUserData =
+          userDataEvent.snapshot.value as Map<dynamic, dynamic>;
+
+      List<dynamic> teamIds = List.from(existingUserData['teamIds'] ?? []);
+      teamIds.remove(currentTeam.value!.teamId);
+
+      // Update user's team information
+      await userRef.update({
+        'teamIds': teamIds,
+        'currentTeamId': teamIds.isNotEmpty ? teamIds.first : null
+      });
+
+      Get.snackbar('Success', 'Member removed from the team');
+    } catch (e) {
+      print('[ERROR] Remove member error: $e');
+      Get.snackbar('Error', 'Failed to remove member: ${e.toString()}');
+    }
+  }
+
+  Rx<List<TeamInvitation>> pendingInvitations = Rx<List<TeamInvitation>>([]);
 }
 
 class TeamInvitation {

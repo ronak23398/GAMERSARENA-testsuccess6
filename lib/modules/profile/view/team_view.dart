@@ -1,14 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:gamers_gram/data/models/team_model.dart';
-import 'package:gamers_gram/modules/auth/controllers/auth_controller.dart';
 import 'package:gamers_gram/modules/profile/controllers/team_controller.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 class TeamManagementPage extends StatelessWidget {
   final TeamController _teamController = Get.find<TeamController>();
-  final AuthController _authController = Get.find<AuthController>();
 
   TeamManagementPage({super.key});
 
@@ -54,23 +51,63 @@ class TeamManagementPage extends StatelessWidget {
   }
 
   // No Team Content
+  // No Team Content
   Widget _buildNoTeamContent(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            'You are not part of any team',
-            style: TextStyle(fontSize: 18),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () => _showCreateTeamDialog(context),
-            child: const Text('Create Team'),
-          ),
-        ],
-      ),
-    );
+    return Obx(() {
+      final invitations = _teamController.pendingInvitations.value;
+
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (invitations.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Text(
+                'Team Invitations',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              ...invitations.map((invitation) {
+                return ListTile(
+                  title: Text('Invited to ${invitation.teamName}'),
+                  subtitle: Text(
+                      'Invited on ${DateFormat.yMMMd().format(invitation.invitedAt)}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.check, color: Colors.green),
+                        onPressed: () => _teamController
+                            .acceptTeamInvitation(invitation.teamId),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => _teamController
+                            .declineTeamInvitation(invitation.teamId),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              const SizedBox(
+                height: 200,
+              )
+            ],
+            const Text(
+              'You are not part of any team',
+              style: TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => _showCreateTeamDialog(context),
+              child: const Text('Create Team'),
+            ),
+
+            // Show invitations if there are any
+          ],
+        ),
+      );
+    });
   }
 
   // Team Invitations Section
@@ -138,7 +175,7 @@ class TeamManagementPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Owner: ${currentTeam.owner}'),
+            Text('Owner: ${currentTeam.username}'),
           ],
         ),
       ),
@@ -162,7 +199,8 @@ class TeamManagementPage extends StatelessWidget {
             child: Icon(Icons.person),
           ),
           title: Text(
-              entry.key.toString()), // User ID - replace with username lookup
+            memberData['username'] ?? entry.key.toString(),
+          ), // User ID - replace with username lookup
           subtitle: Text(memberData['role'] ?? 'Member'),
           trailing: _buildMemberActions(entry.key.toString(), memberData),
         );
@@ -187,13 +225,13 @@ class TeamManagementPage extends StatelessWidget {
         PopupMenuItem(
           child: const Text('Promote to Admin'),
           onTap: () {
-            // Implement promote logic
+            _teamController.promoteMemberToAdmin(memberId);
           },
         ),
         PopupMenuItem(
           child: const Text('Remove from Team'),
           onTap: () {
-            // Implement remove member logic
+            _teamController.removeMemberFromTeam(memberId);
           },
         ),
       ],
@@ -352,7 +390,7 @@ class TeamManagementPage extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              // Implement leave team logic
+              _teamController.leaveTeam();
               Navigator.of(context).pop();
             },
             child: const Text('Leave'),
