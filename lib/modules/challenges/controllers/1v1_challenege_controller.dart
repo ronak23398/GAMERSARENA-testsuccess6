@@ -233,76 +233,6 @@ class ChallengeController extends GetxController {
     }
   }
 
-  Future<bool> declareWinner(String challengeId, String winnerId) async {
-    print("declare winner started");
-    try {
-      isProcessing.value = true;
-
-      final result = await _db
-          .child('challenges/$challengeId')
-          .runTransaction((Object? post) {
-        if (post == null) return Transaction.abort();
-
-        final challengeData = Map<String, dynamic>.from(post as Map);
-
-        if (challengeData['status'] != 'accepted') {
-          return Transaction.abort();
-        }
-
-        final creatorId = challengeData['creatorId'] as String;
-        final acceptorId = challengeData['acceptorId'] as String;
-
-        if (winnerId != creatorId && winnerId != acceptorId) {
-          return Transaction.abort();
-        }
-
-        challengeData['status'] = 'completed';
-        challengeData['winnerId'] = winnerId;
-        challengeData['completedAt'] = ServerValue.timestamp;
-
-        return Transaction.success(challengeData);
-      });
-
-      if (!result.committed) {
-        Get.snackbar('Error', 'Cannot declare winner for this challenge');
-        return false;
-      }
-
-      final challengeData =
-          Map<String, dynamic>.from(result.snapshot.value as Map);
-      final creatorId = challengeData['creatorId'] as String;
-      final acceptorId = challengeData['acceptorId'] as String;
-      final loserId = winnerId == creatorId ? acceptorId : creatorId;
-
-      // Transfer winnings
-      final transferred = await _walletController.transferWinnings(
-        challengeId,
-        winnerId,
-        loserId,
-      );
-
-      if (!transferred) {
-        // Rollback the winner declaration
-        await _db.child('challenges/$challengeId').update({
-          'status': 'accepted',
-          'winnerId': null,
-          'completedAt': null,
-        });
-        Get.snackbar('Error', 'Failed to transfer winnings');
-        return false;
-      }
-
-      Get.snackbar('Success', 'Winner declared and winnings transferred');
-      return true;
-    } catch (e) {
-      print('Error declaring winner: $e');
-      Get.snackbar('Error', 'Failed to declare winner');
-      return false;
-    } finally {
-      isProcessing.value = false;
-    }
-  }
-
   Future<void> cancelChallenge(String challengeId) async {
     try {
       isProcessing.value = true;
@@ -396,43 +326,6 @@ class ChallengeController extends GetxController {
   }
 
   List<ChallengeModel> get challenges => _challenges;
-
-  Future<void> checkChallengeOutcome() async {
-    print("checkChallengeOutcome started");
-    try {
-      // Query for challenges in 'accepted' status with an outcome
-      final snapshot = await _db
-          .child('challenges')
-          .orderByChild('status')
-          .equalTo('accepted')
-          .get();
-
-      if (!snapshot.exists) return;
-
-      final challenges = Map<String, dynamic>.from(snapshot.value as Map);
-
-      for (var entry in challenges.entries) {
-        final challengeId = entry.key; // Get the challenge ID
-        final challengeData = Map<String, dynamic>.from(entry.value);
-
-        // Check if outcome has been selected
-        if (challengeData.containsKey('outcome') &&
-            challengeData.containsKey('outcomeTimestamp')) {
-          final outcomeTimestamp = challengeData['outcomeTimestamp'];
-          final outcomeSenderId = challengeData['outcomeSenderId'];
-          final currentTime = DateTime.now().millisecondsSinceEpoch;
-
-          // Check if 10 minutes have passed since outcome selection
-          if (currentTime - outcomeTimestamp > 600000) {
-            // 10 minutes in milliseconds
-            await resolveChallenge(challengeId); // Pass the challenge ID here
-          }
-        }
-      }
-    } catch (e) {
-      print('Error checking challenge outcomes: $e');
-    }
-  }
 
   Future<Map<String, dynamic>> resolveChallenge(String challengeId) async {
     try {
@@ -557,23 +450,27 @@ class ChallengeController extends GetxController {
       print('Single Outcome: $singleOutcome');
 
       if (singleOutcome == 'win') {
-        print('Single user selected win');
         return {
           'isValid': true,
           'winner': singleOutcome == challengeData['firstUserOutcome']
               ? challengeData['firstUserOutcomeSenderId']
               : challengeData['creatorId'],
+          'loserId': singleOutcome == challengeData['firstUserOutcome']
+              ? challengeData['creatorId']
+              : challengeData['firstUserOutcomeSenderId'],
           'resolution': 'SINGLE_USER_OUTCOME'
         };
       }
 
       if (singleOutcome == 'loss') {
-        print('Single user selected loss');
         return {
           'isValid': true,
           'winner': singleOutcome == challengeData['firstUserOutcome']
               ? challengeData['creatorId']
               : challengeData['firstUserOutcomeSenderId'],
+          'loserId': singleOutcome == challengeData['firstUserOutcome']
+              ? challengeData['firstUserOutcomeSenderId']
+              : challengeData['creatorId'],
           'resolution': 'SINGLE_USER_OUTCOME'
         };
       }
@@ -632,15 +529,21 @@ class ChallengeController extends GetxController {
     print('Challenge Data: $challengeData');
 
     final firstUserOutcome = challengeData['firstUserOutcome'];
-    final secondUserOutcome = challengeData['secondUserOutcome'];
+    final secondUserOutcome = challengeData['secondUserOutcomeSenderOutcome'];
     final firstUserOutcomeSenderId = challengeData['firstUserOutcomeSenderId'];
     final secondUserOutcomeSenderId =
         challengeData['secondUserOutcomeSenderId'];
+
+    // Explicitly get both user IDs
+    final creatorId = challengeData['creatorId'];
+    final acceptorId = challengeData['acceptorId'];
 
     print('First User Outcome: $firstUserOutcome');
     print('Second User Outcome: $secondUserOutcome');
     print('First User Outcome Sender ID: $firstUserOutcomeSenderId');
     print('Second User Outcome Sender ID: $secondUserOutcomeSenderId');
+    print('Creator ID: $creatorId');
+    print('Acceptor ID: $acceptorId');
 
     // If only one user has selected an outcome
     if ((firstUserOutcome == null) != (secondUserOutcome == null)) {
@@ -650,9 +553,10 @@ class ChallengeController extends GetxController {
       final String? singleOutcomeSenderId = firstUserOutcome != null
           ? firstUserOutcomeSenderId
           : secondUserOutcomeSenderId;
-      final String? otherId = firstUserOutcome != null
-          ? challengeData['acceptorId']
-          : challengeData['creatorId'];
+
+      // Determine the other user's ID explicitly
+      final String otherId =
+          (singleOutcomeSenderId == creatorId) ? acceptorId : creatorId;
 
       print('Single Outcome: $singleOutcome');
       print('Single Outcome Sender ID: $singleOutcomeSenderId');

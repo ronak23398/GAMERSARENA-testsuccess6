@@ -34,7 +34,7 @@ class ProfileView extends GetView<ProfileController> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: Text('My Teams'),
+            child: const Text('My Teams'),
           )
         ],
       ),

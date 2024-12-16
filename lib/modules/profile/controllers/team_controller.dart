@@ -297,12 +297,22 @@ class TeamController extends GetxController {
       String? currentUserUid = _authService.getCurrentUserId();
       if (currentUserUid == null) return;
 
-      // Fetch current user's username
+      // Fetch current user's username and existing teams
       DatabaseEvent userEvent =
           await _database.ref('users/$currentUserUid').once();
       Map<dynamic, dynamic> userData =
           userEvent.snapshot.value as Map<dynamic, dynamic>;
       String currentUsername = userData['username'] ?? 'Unknown';
+      List<dynamic> existingTeamIds = List.from(userData['teamIds'] ?? []);
+
+      // Remove user from previous team's members list
+      for (String previousTeamId in existingTeamIds) {
+        if (previousTeamId != teamId) {
+          await _database
+              .ref('teams/$previousTeamId/members/$currentUserUid')
+              .remove();
+        }
+      }
 
       // Update team members
       await _database.ref('teams/$teamId/members/$currentUserUid').set({
@@ -316,17 +326,15 @@ class TeamController extends GetxController {
 
       // Update user's team information
       DatabaseReference userRef = _database.ref('users/$currentUserUid');
-      DatabaseEvent userDataEvent = await userRef.once();
-      Map<dynamic, dynamic> existingUserData =
-          userDataEvent.snapshot.value as Map<dynamic, dynamic>;
 
-      List<dynamic> teamIds = List.from(existingUserData['teamIds'] ?? []);
-      if (!teamIds.contains(teamId)) {
-        teamIds.add(teamId);
+      // Update team list, ensuring no duplicates
+      if (!existingTeamIds.contains(teamId)) {
+        existingTeamIds.add(teamId);
       }
 
       // Update user's current team and team list
-      await userRef.update({'teamIds': teamIds, 'currentTeamId': teamId});
+      await userRef
+          .update({'teamIds': existingTeamIds, 'currentTeamId': teamId});
 
       Get.snackbar('Success', 'Team invitation accepted');
 
@@ -388,24 +396,83 @@ class TeamController extends GetxController {
     }
   }
 
-  // Leave the current team
-  Future<void> leaveTeam() async {
+  // Transfer team ownership
+  Future<void> transferTeamOwnership({
+    required String newOwnerUid,
+    required BuildContext context,
+  }) async {
     try {
       String? currentUserUid = _authService.getCurrentUserId();
       if (currentUserUid == null) {
-        Get.snackbar('Error', 'No authenticated user found');
+        _showErrorMessage(context, 'No authenticated user found');
         return;
       }
 
       if (currentTeam.value == null) {
-        Get.snackbar('Error', 'No current team selected');
+        _showErrorMessage(context, 'No current team selected');
+        return;
+      }
+
+      // Verify that only the current owner can transfer ownership
+      if (currentTeam.value!.owner != currentUserUid) {
+        _showErrorMessage(context, 'Only team owner can transfer ownership');
+        return;
+      }
+
+      // Verify the new owner is a member of the team
+      DataSnapshot memberSnapshot = await _database
+          .ref('teams/${currentTeam.value!.teamId}/members/$newOwnerUid')
+          .get();
+
+      if (!memberSnapshot.exists) {
+        _showErrorMessage(context, 'Selected user is not a team member');
+        return;
+      }
+
+      // Update team ownership
+      await _database
+          .ref('teams/${currentTeam.value!.teamId}/owner')
+          .set(newOwnerUid);
+
+      // Update the new owner's role to owner
+      await _database
+          .ref('teams/${currentTeam.value!.teamId}/members/$newOwnerUid/role')
+          .set('owner');
+
+      // Update the current owner's role to member
+      await _database
+          .ref(
+              'teams/${currentTeam.value!.teamId}/members/$currentUserUid/role')
+          .set('member');
+
+      Get.snackbar('Success', 'Team ownership transferred successfully');
+
+      // Refresh teams to reflect changes
+      await fetchUserTeams();
+    } catch (e) {
+      _showErrorMessage(
+          context, 'Failed to transfer ownership: ${e.toString()}');
+    }
+  }
+
+// Modify leave team method
+  Future<void> leaveTeam(BuildContext context) async {
+    try {
+      String? currentUserUid = _authService.getCurrentUserId();
+      if (currentUserUid == null) {
+        _showErrorMessage(context, 'No authenticated user found');
+        return;
+      }
+
+      if (currentTeam.value == null) {
+        _showErrorMessage(context, 'No current team selected');
         return;
       }
 
       // Check if user is the owner
       if (currentTeam.value!.owner == currentUserUid) {
-        Get.snackbar('Error',
-            'Team owner must promote another member to admin before leaving');
+        _showErrorMessage(context,
+            'Team owner must transfer ownership before leaving the team');
         return;
       }
 
@@ -435,7 +502,7 @@ class TeamController extends GetxController {
       Get.snackbar('Success', 'You have left the team');
     } catch (e) {
       print('[ERROR] Leave team error: $e');
-      Get.snackbar('Error', 'Failed to leave team: ${e.toString()}');
+      _showErrorMessage(context, 'Failed to leave team: ${e.toString()}');
     }
   }
 

@@ -4,9 +4,11 @@ import 'package:gamers_gram/data/services/auth_service.dart';
 import 'package:gamers_gram/modules/challenges/controllers/1v1_challenege_controller.dart';
 import 'package:gamers_gram/modules/challenges/controllers/scrim_controller.dart';
 import 'package:gamers_gram/modules/challenges/view/1v1_create_challenge_dialogue_view.dart';
-import 'package:gamers_gram/modules/challenges/view/challengeAndscrim_chat_page.dart';
+import 'package:gamers_gram/modules/challenges/view/challenge_chat_page.dart';
+import 'package:gamers_gram/modules/challenges/view/scrim_chat_page.dart';
 import 'package:gamers_gram/modules/challenges/view/scrim_create_dialogue.dart';
 import 'package:gamers_gram/data/models/scrim_model.dart';
+import 'package:gamers_gram/modules/profile/controllers/team_controller.dart';
 import 'package:get/get.dart';
 import 'package:firebase_database/firebase_database.dart';
 
@@ -54,100 +56,143 @@ class _HomePageState extends State<HomePage>
   }
 
   void _showAcceptScrimDialog(ScrimModel scrim) {
-    final TextEditingController teamNameController = TextEditingController();
+    final TeamController teamController = Get.find<TeamController>();
 
     Get.dialog(
       AlertDialog(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
         title: Text(
           'Accept Scrim',
-          style: TextStyle(color: Colors.grey[200]),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
         ),
-        content: TextField(
-          controller: teamNameController,
-          style: TextStyle(color: Colors.grey[200]),
-          decoration: InputDecoration(
-            labelText: 'Your Team Name',
-            labelStyle: TextStyle(color: Colors.grey[400]),
-            prefixIcon: Icon(Icons.group, color: Colors.grey[400]),
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: Colors.grey[700]!),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: Colors.grey[500]!),
-            ),
-          ),
-        ),
+        content: Obx(() {
+          final currentTeam = teamController.currentTeam.value;
+
+          if (currentTeam == null) {
+            return Text(
+              'No team selected',
+              style: Theme.of(context).textTheme.bodyMedium,
+            );
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Team: ${currentTeam.name}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              _buildDetailText('Game: ${scrim.game}'),
+              _buildDetailText('Server: ${scrim.server}'),
+              _buildDetailText('Amount: ${scrim.amount}'),
+            ],
+          );
+        }),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey[700],
+            child: Text(
+              'Cancel',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-            onPressed: () {
-              final teamName = teamNameController.text.trim();
-              if (teamName.isNotEmpty) {
-                scrimController.acceptScrim(scrim.id, teamName).then((success) {
-                  if (success) {
-                    Get.back();
-                  }
-                });
-              } else {
-                Get.snackbar(
-                  'Error',
-                  'Please enter a team name',
-                  backgroundColor: Colors.grey[900],
-                  colorText: Colors.grey[200],
-                );
-              }
-            },
-            child: Text('Accept', style: TextStyle(color: Colors.grey[200])),
           ),
+          Obx(() {
+            final currentTeam = teamController.currentTeam.value;
+
+            return ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: currentTeam == null
+                  ? null
+                  : () {
+                      scrimController
+                          .acceptScrim(scrim.id, currentTeam)
+                          .then((success) {
+                        if (success) {
+                          Get.back();
+                        }
+                      });
+                    },
+              child: Text(
+                'Accept',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSecondary),
+              ),
+            );
+          }),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetailText(String text) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+          ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900],
       appBar: AppBar(
-        backgroundColor: Colors.grey[900],
         title: Text(
           'Gaming Challenges',
-          style: TextStyle(color: Colors.grey[200]),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+              ),
         ),
         bottom: TabBar(
           indicatorSize: TabBarIndicatorSize.tab,
-          indicatorColor: Colors.grey[500],
-          indicatorWeight: 3,
+          indicatorColor: Theme.of(context).colorScheme.secondary,
           controller: _tabController,
           tabs: [
             Tab(
               child: Text(
                 "1v1",
-                style: TextStyle(color: Colors.grey[300]),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
               ),
             ),
             Tab(
               child: Text(
                 "Scrims",
-                style: TextStyle(color: Colors.grey[300]),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.wallet, color: Colors.grey[300]),
+            icon: Icon(
+              Icons.wallet,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             onPressed: () => Get.toNamed("/wallet"),
           ),
           IconButton(
-            icon: Icon(Icons.logout, color: Colors.grey[300]),
+            icon: Icon(
+              Icons.logout,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             onPressed: () {
               AuthService().signOut();
             },
@@ -163,8 +208,11 @@ class _HomePageState extends State<HomePage>
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateDialog(context),
-        backgroundColor: Colors.grey[700],
-        child: Icon(Icons.add, color: Colors.grey[200]),
+        backgroundColor: Theme.of(context).colorScheme.secondary,
+        child: Icon(
+          Icons.add,
+          color: Theme.of(context).colorScheme.onSecondary,
+        ),
       ),
     );
   }
@@ -177,19 +225,18 @@ class _HomePageState extends State<HomePage>
             final currentUser = FirebaseAuth.instance.currentUser;
 
             return Card(
-              color: Colors.grey[850],
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: ListTile(
                 title: Text(
                   '${challenge.game} - ${challenge.server}',
-                  style: TextStyle(color: Colors.grey[200]),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
                 subtitle: FutureBuilder<String>(
                   future: getUserName(challenge.creatorId),
                   builder: (context, snapshot) {
                     return Text(
                       snapshot.data ?? 'Loading...',
-                      style: TextStyle(color: Colors.grey[400]),
+                      style: Theme.of(context).textTheme.bodySmall,
                     );
                   },
                 ),
@@ -208,12 +255,11 @@ class _HomePageState extends State<HomePage>
             final currentUser = FirebaseAuth.instance.currentUser;
 
             return Card(
-              color: Colors.grey[850],
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: ListTile(
                 title: Text(
                   '${scrim.game} - ${scrim.server}',
-                  style: TextStyle(color: Colors.grey[200]),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,19 +268,15 @@ class _HomePageState extends State<HomePage>
                       future: getUserName(scrim.creatorId),
                       builder: (context, snapshot) {
                         return Text(
-                          'Creator: ${snapshot.data ?? 'Loading...'}',
-                          style: TextStyle(color: Colors.grey[400]),
+                          'Challenger Team: ${scrim.creatorTeamName}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         );
                       },
-                    ),
-                    Text(
-                      'Creator Team: ${scrim.creatorTeamName}',
-                      style: TextStyle(color: Colors.grey[400]),
                     ),
                     if (scrim.acceptorTeamName != null)
                       Text(
                         'Acceptor Team: ${scrim.acceptorTeamName}',
-                        style: TextStyle(color: Colors.grey[400]),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                   ],
                 ),
@@ -252,10 +294,14 @@ class _HomePageState extends State<HomePage>
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.currency_rupee, size: 16, color: Colors.grey[400]),
+            Icon(
+              Icons.currency_rupee,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
             Text(
               challenge.amount.toStringAsFixed(2),
-              style: TextStyle(color: Colors.grey[400]),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
@@ -272,10 +318,14 @@ class _HomePageState extends State<HomePage>
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.currency_rupee, size: 16, color: Colors.grey[400]),
+            Icon(
+              Icons.currency_rupee,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
             Text(
               scrim.amount.toStringAsFixed(2),
-              style: TextStyle(color: Colors.grey[400]),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
@@ -286,66 +336,79 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _getChallengeActionButton(dynamic challenge, User? currentUser) {
-    if (challenge.status == 'accepted' &&
-        (currentUser?.uid == challenge.creatorId ||
-            currentUser?.uid == challenge.acceptorId)) {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
-        onPressed: () => Get.to(
-          () => ChallengeChatPage(
-            challengeId: challenge.id,
-            opponentId: currentUser?.uid == challenge.creatorId
-                ? challenge.acceptorId ?? challenge.creatorId
-                : challenge.creatorId,
-          ),
-        ),
-        child:
-            Text('Enter Challenge', style: TextStyle(color: Colors.grey[200])),
-      );
-    } else if (currentUser?.uid != challenge.creatorId) {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
-        onPressed: () => challengeController.acceptChallenge(challenge.id),
-        child: Text('Accept', style: TextStyle(color: Colors.grey[200])),
-      );
-    } else {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.red[900]),
-        onPressed: () => challengeController.cancelChallenge(challenge.id),
-        child: Text('Cancel', style: TextStyle(color: Colors.grey[200])),
-      );
-    }
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: challenge.status == 'accepted'
+            ? Theme.of(context).colorScheme.secondary
+            : currentUser?.uid != challenge.creatorId
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.error,
+      ),
+      onPressed: () {
+        if (challenge.status == 'accepted' &&
+            (currentUser?.uid == challenge.creatorId ||
+                currentUser?.uid == challenge.acceptorId)) {
+          Get.to(
+            () => ChallengeChatPage(
+              challengeId: challenge.id,
+              opponentId: currentUser?.uid == challenge.creatorId
+                  ? challenge.acceptorId ?? challenge.creatorId
+                  : challenge.creatorId,
+            ),
+          );
+        } else if (currentUser?.uid != challenge.creatorId) {
+          challengeController.acceptChallenge(challenge.id);
+        } else {
+          challengeController.cancelChallenge(challenge.id);
+        }
+      },
+      child: Text(
+        challenge.status == 'accepted'
+            ? 'Enter Challenge'
+            : currentUser?.uid != challenge.creatorId
+                ? 'Accept'
+                : 'Cancel',
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onPrimary),
+      ),
+    );
   }
 
   Widget _getScrimActionButton(ScrimModel scrim, User? currentUser) {
-    if (scrim.status == 'accepted' &&
-        (currentUser?.uid == scrim.creatorId ||
-            currentUser?.uid == scrim.acceptorId)) {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
-        onPressed: () => Get.to(
-          () => ChallengeChatPage(
-            challengeId: scrim.id,
-            opponentId: currentUser?.uid == scrim.creatorId
-                ? scrim.acceptorId ?? scrim.creatorId
-                : scrim.creatorId,
-          ),
-        ),
-        child:
-            Text('Enter Scrim Chat', style: TextStyle(color: Colors.grey[200])),
-      );
-    } else if (currentUser?.uid != scrim.creatorId) {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
-        onPressed: () => _showAcceptScrimDialog(scrim),
-        child: Text('Accept', style: TextStyle(color: Colors.grey[200])),
-      );
-    } else {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.red[900]),
-        onPressed: () => scrimController.cancelScrim(scrim.id),
-        child: Text('Cancel', style: TextStyle(color: Colors.grey[200])),
-      );
-    }
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: scrim.status == 'accepted'
+            ? Theme.of(context).colorScheme.secondary
+            : currentUser?.uid != scrim.creatorId
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.error,
+      ),
+      onPressed: () {
+        if (scrim.status == 'accepted' &&
+            (currentUser?.uid == scrim.creatorId ||
+                currentUser?.uid == scrim.acceptorId)) {
+          Get.to(
+            () => ScrimChatPage(scrimId: scrim.id, scrim: scrim),
+          );
+        } else if (currentUser?.uid != scrim.creatorId) {
+          _showAcceptScrimDialog(scrim);
+        } else {
+          scrimController.cancelScrim(scrim.id);
+        }
+      },
+      child: Text(
+        scrim.status == 'accepted'
+            ? 'Enter Scrim Chat'
+            : currentUser?.uid != scrim.creatorId
+                ? 'Accept'
+                : 'Cancel',
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onPrimary),
+      ),
+    );
   }
 }

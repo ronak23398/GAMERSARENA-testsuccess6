@@ -1,9 +1,11 @@
-import 'package:appwrite/appwrite.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:gamers_gram/data/services/supabase_storage.dart';
 import 'package:gamers_gram/modules/challenges/controllers/challenge_chat_controller.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ChallengeChatPage extends StatelessWidget {
   final String challengeId;
@@ -14,13 +16,17 @@ class ChallengeChatPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Define auth and database instances
+    final auth = FirebaseAuth.instance;
+    final database = FirebaseDatabase.instance;
+    final supabaseClient = Supabase.instance.client;
+
     final controller = Get.put(ChallengeChatController(
+      imageUploadService: ChallengeImageUploadService(
+          supabaseClient: supabaseClient, database: database, auth: auth),
       challengeId: challengeId,
       opponentId: opponentId,
-      client: Client(),
-      storage: Storage(Client()),
     ));
-    final auth = FirebaseAuth.instance;
 
     return Scaffold(
       appBar: AppBar(
@@ -28,7 +34,7 @@ class ChallengeChatPage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // Countdown Timer Display
+          // Countdown Timer Display (existing code remains the same)
           GetBuilder<ChallengeChatController>(
             builder: (controller) {
               if (controller.hasSelectedOutcome.value) {
@@ -67,10 +73,11 @@ class ChallengeChatPage extends StatelessWidget {
             },
           ),
 
-          // Messages ListView
+          // Messages ListView (existing code remains the same)
           Expanded(
             child: Obx(() {
               return ListView.builder(
+                reverse: true, // Added to match the insert(0) in controller
                 itemCount: controller.messages.length,
                 itemBuilder: (context, index) {
                   final message = controller.messages[index];
@@ -148,7 +155,6 @@ class ChallengeChatPage extends StatelessWidget {
 
           // Outcome selection buttons
           Obx(() {
-            // Check if outcome buttons should be shown
             if (controller.shouldShowOutcomeButtons()) {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -157,7 +163,6 @@ class ChallengeChatPage extends StatelessWidget {
                     onPressed: () => controller.selectOutcome(context, true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
-                      // Disable if an outcome has already been selected
                       disabledBackgroundColor: Colors.green.withOpacity(0.5),
                     ),
                     child: const Text('Win'),
@@ -166,7 +171,6 @@ class ChallengeChatPage extends StatelessWidget {
                     onPressed: () => controller.selectOutcome(context, false),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
-                      // Disable if an outcome has already been selected
                       disabledBackgroundColor: Colors.red.withOpacity(0.5),
                     ),
                     child: const Text('Lose'),
@@ -182,11 +186,11 @@ class ChallengeChatPage extends StatelessWidget {
             children: [
               IconButton(
                 icon: const Icon(Icons.camera_alt),
-                onPressed: () => controller.pickImage(ImageSource.camera),
+                onPressed: () => controller.uploadChallengeProofImage(),
               ),
               IconButton(
                 icon: const Icon(Icons.photo_library),
-                onPressed: () => controller.pickImage,
+                onPressed: () => controller.uploadChallengeProofImage(),
               ),
               Expanded(
                 child: TextField(

@@ -2,27 +2,27 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:gamers_gram/data/services/supabase_storage.dart';
-import 'package:gamers_gram/modules/challenges/controllers/1v1_challenege_controller.dart';
-import 'package:gamers_gram/modules/wallet/controllers/wallet_controller.dart';
+import 'package:gamers_gram/data/models/scrim_model.dart';
+import 'package:gamers_gram/modules/challenges/controllers/scrim_controller.dart';
 import 'package:get/get.dart';
-import 'package:image_picker/image_picker.dart';
 
-class ChallengeChatController extends GetxController {
-  final ChallengeImageUploadService imageUploadService;
-  RxString challengeProofImageUrl = RxString('');
-  final String challengeId;
-  final String opponentId;
+class ScrimChatController extends GetxController {
+  final String scrimId;
+  final ScrimModel scrim;
+
+  // Determine opponent ID based on current user's role
+  late final String opponentId;
 
   final Rx<User?> _currentUser = Rx<User?>(FirebaseAuth.instance.currentUser);
   final _database = FirebaseDatabase.instance.ref();
-  final _walletController = Get.find<WalletController>();
 
-  ChallengeChatController({
-    required ChallengeImageUploadService imageUploadService,
-    required this.challengeId,
-    required this.opponentId,
-  }) : imageUploadService = imageUploadService;
+
+  ScrimChatController({
+    required this.scrimId,
+    required this.scrim,
+  })  ;
+
+ 
 
   final RxList<dynamic> messages = <dynamic>[].obs;
   final TextEditingController messageController = TextEditingController();
@@ -44,52 +44,19 @@ class ChallengeChatController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    print('ChallengeChatController onInit called');
+    print('ScrimChatController onInit called');
     _loadChatMessages();
-    _monitorChallengeOutcome();
-  }
-
-  Future<void> uploadChallengeProofImage() async {
-    final picker = ImagePicker();
-    try {
-      final pickedFile = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920, // Optional: Limit image width
-        maxHeight: 1080, // Optional: Limit image height
-        imageQuality: 80, // Optional: Compress image quality
-      );
-
-      if (pickedFile != null) {
-        final uploadedImageUrl =
-            await imageUploadService.uploadChallengeProofImage(
-          imageFile: pickedFile,
-          challengeId: challengeId,
-        );
-
-        if (uploadedImageUrl != null) {
-          challengeProofImageUrl.value = uploadedImageUrl;
-        }
-      }
-    } catch (e) {
-      print('Error picking image: $e');
-      Get.snackbar(
-        'Image Selection Error',
-        'Failed to select an image',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
+    _monitorScrimOutcome();
   }
 
   void _loadChatMessages() {
-    print('Loading chat messages for challenge: $challengeId');
+    print('Loading chat messages for scrim: $scrimId');
     _database
-        .child('challenge_chats/$challengeId/messages')
+        .child('scrim_chats/$scrimId/messages')
         .orderByChild('timestamp')
         .onChildAdded
         .listen((event) {
-      print('New message received for challenge: $challengeId');
+      print('New message received for scrim: $scrimId');
       if (event.snapshot.value != null) {
         final newMessage = {
           ...event.snapshot.value as Map,
@@ -101,26 +68,25 @@ class ChallengeChatController extends GetxController {
     });
   }
 
-  void _monitorChallengeOutcome() {
-    print("Monitoring challenge outcome for challengeId: $challengeId");
-    _database.child('challenges/$challengeId').onValue.listen((event) {
-      final challengeData = event.snapshot.value as Map?;
-      print('Challenge data updated: $challengeData');
+  void _monitorScrimOutcome() {
+    print("Monitoring scrim outcome for scrimId: $scrimId");
+    _database.child('scrims/$scrimId').onValue.listen((event) {
+      final scrimData = event.snapshot.value as Map?;
+      print('Scrim data updated: $scrimData');
 
-      if (challengeData != null) {
+      if (scrimData != null) {
         // Check if outcomes have been selected
-        if (challengeData.containsKey('firstUserOutcome') &&
-            challengeData.containsKey('firstUserOutcomeTimestamp')) {
+        if (scrimData.containsKey('firstUserOutcome') &&
+            scrimData.containsKey('firstUserOutcomeTimestamp')) {
           hasSelectedOutcome.value = true;
-          currentOutcome.value = challengeData['firstUserOutcome'] ?? '';
-          outcomeSelectedBy.value =
-              challengeData['firstUserOutcomeSenderId'] ?? '';
+          currentOutcome.value = scrimData['firstUserOutcome'] ?? '';
+          outcomeSelectedBy.value = scrimData['firstUserOutcomeSenderId'] ?? '';
 
           print(
               'First user outcome selected: ${currentOutcome.value} by ${outcomeSelectedBy.value}');
 
           // Start timer when first outcome is selected
-          dynamic timestamp = challengeData['firstUserOutcomeTimestamp'];
+          dynamic timestamp = scrimData['firstUserOutcomeTimestamp'];
           if (timestamp != null) {
             outcomeSelectionTime.value = DateTime.fromMillisecondsSinceEpoch(
                 int.tryParse(timestamp.toString()) ?? 0);
@@ -128,9 +94,9 @@ class ChallengeChatController extends GetxController {
           }
 
           // Check for second user's outcome
-          if (challengeData.containsKey('secondUserOutcome')) {
-            final secondUserOutcome = challengeData['secondUserOutcome'];
-            final firstUserOutcome = challengeData['firstUserOutcome'];
+          if (scrimData.containsKey('secondUserOutcome')) {
+            final secondUserOutcome = scrimData['secondUserOutcome'];
+            final firstUserOutcome = scrimData['firstUserOutcome'];
 
             print('Second user outcome: $secondUserOutcome');
 
@@ -145,7 +111,7 @@ class ChallengeChatController extends GetxController {
   }
 
   void _startTimer() {
-    print("Starting timer for challengeId: $challengeId");
+    print("Starting timer for scrimId: $scrimId");
     _progressTimer?.cancel();
 
     if (outcomeSelectionTime.value != null) {
@@ -158,7 +124,7 @@ class ChallengeChatController extends GetxController {
         print('Timer running - Time elapsed: $difference');
 
         if (difference >= totalTime) {
-          print('Timer expired for challengeId: $challengeId');
+          print('Timer expired for scrimId: $scrimId');
           _handleTimerExpiration();
           timer.cancel();
         }
@@ -169,45 +135,34 @@ class ChallengeChatController extends GetxController {
   }
 
   void _handleTimerExpiration() async {
-    print("Handling timer expiration for challengeId: $challengeId");
+    print("Handling timer expiration for scrimId: $scrimId");
 
     try {
-      // First, fetch the complete challenge data
-      final challengeSnapshot =
-          await _database.child('challenges/$challengeId').get();
-      final challengeData = challengeSnapshot.value as Map?;
-      print("Challenge data fetched from Firebase: $challengeData");
+      // First, fetch the complete scrim data
+      final scrimSnapshot = await _database.child('scrims/$scrimId').get();
+      final scrimData = scrimSnapshot.value as Map?;
+      print("Scrim data fetched from Firebase: $scrimData");
 
-      if (challengeData == null) {
-        print('No challenge data found');
+      
+
+      if (scrimData == null) {
+        print('No scrim data found');
         return;
       }
 
-      // Resolve challenge with complete data
-      await ChallengeController().resolveChallenge(
-        challengeId,
-      );
-      print("Resolve challenge started for challengeId: $challengeId");
+      // Resolve scrim
+      await ScrimController().resolveScrim(scrimId);
+      print("Resolve scrim started for scrimId: $scrimId");
 
       isTimerRunning.value = false;
       update();
     } catch (e) {
-      print('Error in timer expiration for challengeId: $challengeId - $e');
+      print('Error in timer expiration for scrimId: $scrimId - $e');
     }
   }
 
-  void selectOutcome(BuildContext context, bool isWin) {
-    print("Selecting outcome for challengeId: $challengeId - isWin: $isWin");
-
-    // Check if challenge proof image is uploaded
-    if (challengeProofImageUrl.value.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Please upload challenge proof image before selecting outcome',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
-    }
+  void selectScrimOutcome(BuildContext context, bool isWin) {
+    print("Selecting outcome for scrimId: $scrimId - isWin: $isWin");
 
     // Check if this is the first or second user selecting outcome
     final isFirstUser = !hasSelectedOutcome.value;
@@ -216,18 +171,13 @@ class ChallengeChatController extends GetxController {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirm Outcome'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Are you sure you want to declare this as a ${isWin ? 'Win' : 'Loss'}?',
-            ),
-            Image.network(challengeProofImageUrl.value, height: 100),
-          ],
+        content: Text(
+          'Are you sure you want to declare this as a ${isWin ? 'Win' : 'Loss'}?',
         ),
         actions: [
           TextButton(
             onPressed: () {
+              print('Outcome selection cancelled');
               Navigator.pop(context);
             },
             child: const Text('Cancel'),
@@ -237,7 +187,7 @@ class ChallengeChatController extends GetxController {
               if (isFirstUser) {
                 print("Outcome selected by first user");
                 // First user selects outcome
-                _database.child('challenges/$challengeId').update({
+                _database.child('scrims/$scrimId').update({
                   'firstUserOutcome': isWin ? 'win' : 'loss',
                   'firstUserOutcomeSenderId': _currentUser.value?.uid,
                   'firstUserOutcomeTimestamp': ServerValue.timestamp
@@ -254,7 +204,7 @@ class ChallengeChatController extends GetxController {
               } else {
                 print("Outcome selected by second user");
                 // Second user selects outcome
-                _database.child('challenges/$challengeId').update({
+                _database.child('scrims/$scrimId').update({
                   'secondUserOutcome': isWin ? 'win' : 'loss',
                   'secondUserOutcomeSenderId': _currentUser.value?.uid,
                 });
@@ -266,13 +216,14 @@ class ChallengeChatController extends GetxController {
                 print(
                     'First user outcome: $firstUserOutcome, Second user outcome: $secondUserOutcome');
 
-                // Resolve challenge based on outcomes
+                // Resolve scrim based on outcomes
                 if (firstUserOutcome == secondUserOutcome) {
                   // Both claim win or both claim loss
                   _handleBothClaimedWin(context);
                 } else {
-                  // Different outcomes - proceed with challenge resolution
-                  print('Resolving challenge due to different outcomes');
+                  // Different outcomes - proceed with scrim resolution
+                  print('Resolving scrim due to different outcomes');
+                  ScrimController().resolveScrim(scrimId);
                 }
 
                 Navigator.pop(context);
@@ -286,7 +237,7 @@ class ChallengeChatController extends GetxController {
   }
 
   void _handleBothClaimedWin(BuildContext context) {
-    print("Handling both users claiming win for challengeId: $challengeId");
+    print("Handling both users claiming win for scrimId: $scrimId");
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -300,15 +251,15 @@ class ChallengeChatController extends GetxController {
               // Option to change outcome
               print('Forcing user to change outcome');
               Navigator.pop(context);
-              selectOutcome(context, false); // Force to select loss
+              selectScrimOutcome(context, false); // Force to select loss
             },
             child: const Text('Change Outcome'),
           ),
           TextButton(
             onPressed: () {
               // Escalate to admin
-              print('Escalating challenge to admin review');
-              _database.child('challenges/$challengeId').update({
+              print('Escalating scrim to admin review');
+              _database.child('scrims/$scrimId').update({
                 'status': 'admin_review',
                 'adminReviewReason': 'Both users claimed win'
               });
@@ -322,13 +273,13 @@ class ChallengeChatController extends GetxController {
   }
 
   Future<void> sendMessage({String? message, String? imageUrl}) async {
-    print("Sending message for challengeId: $challengeId");
+    print("Sending message for scrimId: $scrimId");
     if ((message == null || message.trim().isEmpty) && imageUrl == null) {
       print('No message or image to send');
       return;
     }
 
-    await _database.child('challenge_chats/$challengeId/messages').push().set({
+    await _database.child('scrim_chats/$scrimId/messages').push().set({
       'senderId': _currentUser.value?.uid,
       'senderName': _currentUser.value?.displayName ?? 'User',
       'message': message?.trim(),
@@ -339,8 +290,9 @@ class ChallengeChatController extends GetxController {
     print('Message sent: ${message ?? 'Image message'}');
   }
 
+
   Duration getRemainingTime() {
-    print("Getting remaining time for challengeId: $challengeId");
+    print("Getting remaining time for scrimId: $scrimId");
     if (outcomeSelectionTime.value == null) return Duration.zero;
     final elapsedTime = DateTime.now().difference(outcomeSelectionTime.value!);
     final remainingTime = totalTime - elapsedTime;
@@ -349,8 +301,7 @@ class ChallengeChatController extends GetxController {
   }
 
   bool shouldShowOutcomeButtons() {
-    print(
-        "Checking if outcome buttons should be shown for challengeId: $challengeId");
+    print("Checking if outcome buttons should be shown for scrimId: $scrimId");
     final shouldShow = !hasSelectedOutcome.value ||
         (hasSelectedOutcome.value &&
             outcomeSelectedBy.value != _currentUser.value?.uid);

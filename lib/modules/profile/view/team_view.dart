@@ -88,7 +88,7 @@ class TeamManagementPage extends StatelessWidget {
                     ],
                   ),
                 );
-              }).toList(),
+              }),
               const SizedBox(
                 height: 200,
               )
@@ -223,9 +223,10 @@ class TeamManagementPage extends StatelessWidget {
     return PopupMenuButton(
       itemBuilder: (context) => [
         PopupMenuItem(
-          child: const Text('Promote to Admin'),
+          child: const Text('Promote to owner'),
           onTap: () {
-            _teamController.promoteMemberToAdmin(memberId);
+            _teamController.transferTeamOwnership(
+                newOwnerUid: memberId, context: context);
           },
         ),
         PopupMenuItem(
@@ -390,7 +391,7 @@ class TeamManagementPage extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              _teamController.leaveTeam();
+              _teamController.leaveTeam(context);
               Navigator.of(context).pop();
             },
             child: const Text('Leave'),
